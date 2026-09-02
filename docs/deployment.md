@@ -35,24 +35,44 @@ edge 설정이 없으면 앱 배포가 헬스체크에서 막힌다.
 ### 1. 서버 · 배포용 SSH 키
 
 edge · SecretManager 저장소에 이미 등록해 둔 키가 있으면 **같은 값을 그대로 쓰면 된다.**
-이 단계는 건너뛰고 3번으로 간다.
 
-없다면 서버에서 만든다.
+> **GitHub Secrets 는 등록한 값을 다시 볼 수 없다.** 쓰기 전용이라 다른 저장소에서
+> 복사해 올 수 없고, 화면에도 표시되지 않는다. 값은 서버의 개인키 파일에서 다시 꺼낸다.
+
+서버에 있는 개인키를 찾는다. `authorized_keys` 에 등록된 공개키와 짝이 맞는 것을 고른다.
 
 ```bash
-ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/gh_deploy -N ""
+ls -l ~/.ssh/
 ```
 
 ```bash
-cat ~/.ssh/gh_deploy.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+for k in ~/.ssh/id_* ~/.ssh/*deploy*; do case "$k" in *.pub) continue;; esac; [ -f "$k" ] || continue; echo "== $k"; ssh-keygen -y -f "$k" 2>/dev/null; done
 ```
 
 ```bash
-cat ~/.ssh/gh_deploy
+cat ~/.ssh/authorized_keys
+```
+
+위 두 출력에서 `ssh-ed25519 AAAA...` 부분이 일치하는 개인키가 배포에 쓰는 키다.
+`cat` 으로 그 파일 전문을 꺼내 `SERVER_SSH_KEY` 에 넣는다.
+
+짝이 맞는 게 없거나 어떤 키인지 모르겠으면 **새로 만들어 추가하면 된다.**
+`authorized_keys` 는 여러 줄을 허용하므로 기존 키는 그대로 살아 있는다.
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-weekly-report" -f ~/.ssh/gh_deploy_weekly -N ""
+```
+
+```bash
+cat ~/.ssh/gh_deploy_weekly.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+```
+
+```bash
+cat ~/.ssh/gh_deploy_weekly
 ```
 
 마지막 명령이 출력한 **개인키 전문**(`-----BEGIN` ~ `-----END` 줄 포함)을
-뒤에서 `SERVER_SSH_KEY` 로 넣는다.
+뒤에서 `SERVER_SSH_KEY` 로 넣는다. 줄바꿈까지 그대로 붙여야 한다.
 
 ### 2. 서버 · 인증서 발급
 
@@ -66,6 +86,27 @@ export DuckDNS_Token="발급받은_토큰"
 acme.sh --issue --dns dns_duckdns -d weekly-report-mik.duckdns.org
 ```
 
+`--install-cert` 는 대상 디렉터리를 만들어 주지 않는다. 먼저 만들어 둔다.
+**소유자를 acme.sh 를 돌리는 계정으로 맞춘다.**
+
+```bash
+sudo install -d -o "$USER" -g "$USER" /etc/edge/certs/weekly-report
+```
+
+> `sudo mkdir` 로 만들면 디렉터리 주인이 root 가 되어 `--install-cert` 가
+> `Permission denied` 로 실패한다. 여기서 `sudo acme.sh` 로 우회하면 안 된다.
+> acme.sh 는 `~/.acme.sh` 에 설치되어 **갱신 cron 도 같은 사용자로 돌기 때문에**,
+> root 로 한 번 넣어두면 60일 뒤 자동 갱신에서 똑같이 실패하고 인증서가
+> 조용히 만료된다. 디렉터리를 acme.sh 를 돌리는 사용자 소유로 두어야 한다.
+>
+> 이미 root 소유로 만들었다면:
+>
+> ```bash
+> sudo chown -R "$USER:$USER" /etc/edge/certs/weekly-report
+> ```
+
+이제 설치한다.
+
 ```bash
 acme.sh --install-cert -d weekly-report-mik.duckdns.org \
   --key-file       /etc/edge/certs/weekly-report/privkey.pem \
@@ -73,13 +114,8 @@ acme.sh --install-cert -d weekly-report-mik.duckdns.org \
   --reloadcmd      "docker exec edge-proxy nginx -s reload"
 ```
 
-`--install-cert` 는 대상 디렉터리를 만들어 주지 않는 경우가 있다. 미리 만들어 둔다.
-
-```bash
-sudo mkdir -p /etc/edge/certs/weekly-report
-```
-
 `--reloadcmd` 덕분에 갱신될 때마다 nginx 가 알아서 다시 읽는다.
+이 명령도 같은 사용자로 실행되므로, 그 계정이 docker 그룹에 있어야 한다.
 이게 없으면 인증서는 갱신됐는데 nginx 는 옛것을 물고 있어 어느 날 만료된다.
 
 확인:
@@ -89,6 +125,11 @@ ls -l /etc/edge/certs/weekly-report/
 ```
 
 `fullchain.pem` 과 `privkey.pem` 이 둘 다 보여야 다음으로 넘어간다.
+소유자가 acme.sh 를 돌리는 계정인지도 함께 본다. 기존 도메인들과 맞춰 두면 된다.
+
+```bash
+ls -ld /etc/edge/certs/*/
+```
 
 ### 3. 서버 · DB 비밀번호 배치
 
@@ -180,6 +221,8 @@ cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.
 | 배포가 `.env.secrets 가 없습니다` 로 멈춤 | 위 3번을 안 했다 |
 | 헬스체크 실패 · 502 | edge 에 `weekly-report.conf` 가 반영됐는지, 인증서가 있는지 |
 | edge 배포가 `nginx -t` 에서 실패 | `/etc/edge/certs/weekly-report/` 에 인증서가 없다 (위 2번) |
+| `--install-cert` 가 `Permission denied` | 인증서 디렉터리가 root 소유다. 위 2번의 주석 참고 |
+| 60~90일 뒤 갑자기 인증서 만료 | 갱신 cron 이 인증서 디렉터리에 못 쓰고 있다. `acme.sh --list` 와 소유자 확인 |
 | 백엔드가 DB 인증 실패로 재시작 | `.env.secrets` 를 다시 만들었다. 아래 "DB 비밀번호를 잃어버렸을 때" |
 | 엉뚱한 사이트가 뜬다 | 해당 도메인의 server 블록이 없어 edge 기본 서버로 갔다 |
 
