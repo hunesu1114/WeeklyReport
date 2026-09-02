@@ -4,8 +4,11 @@ frontend/dist/
 frontend/node_modules/
 frontend/.vite/
 
-# env
+# env / secrets
+# .env.secrets 는 서버에만 둔다. 저장소에 들어오면 안 된다.
 .env
+.env.*
+!.env.example
 
 # ide
 .idea/

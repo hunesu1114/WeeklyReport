@@ -1,0 +1,238 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: # Actions 탭에서 수동 실행
+
+# 배포가 겹치면 서버에서 이미지 태그와 컨테이너 상태가 뒤섞인다.
+# 앞선 실행이 끝날 때까지 기다린다.
+concurrency:
+  group: weekly-report-deploy
+  cancel-in-progress: false
+
+env:
+  BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/weekly-report-backend
+  WEB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/weekly-report-web
+  # edge 프록시가 라우팅하는 도메인. 배포 확인에 쓴다.
+  DOMAIN: weekly-report-mik.duckdns.org
+
+jobs:
+  # ───────────────────────────────────────
+  # 1단계: 테스트 (PR 포함 항상 실행)
+  # ───────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 백엔드 ──
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # DB 는 필요 없다. 엑셀 렌더러 테스트는 POI 만 쓰고 스프링 컨텍스트도 띄우지 않는다.
+      # 생성한 xlsx 를 다시 읽어 레이아웃·색·열 너비·수식·병합을 원본 샘플 기준으로 검증한다.
+      - name: Backend tests
+        working-directory: backend
+        run: mvn -B test
+
+      - name: Upload backend test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/target/surefire-reports
+          retention-days: 7
+
+      # ── 프런트엔드 ──
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  # ───────────────────────────────────────
+  # 2단계: 이미지 빌드 & Docker Hub push
+  # ───────────────────────────────────────
+  build-and-push:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 프런트는 API base URL 을 빌드 타임에 받지 않는다.
+      # 앱 nginx 가 같은 오리진의 /api 를 백엔드로 프록시하므로 상대 경로만 쓴다.
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.WEB_IMAGE }}:latest
+            ${{ env.WEB_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ───────────────────────────────────────
+  # 3단계: 서버 배포
+  # ───────────────────────────────────────
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Secret 이 비어 있으면 ssh-action 은 "missing server host" 라고만 한다.
+      # 어느 값이 없는지 안 알려줘서, 여기서 먼저 이름을 대고 멈춘다.
+      - name: Secrets 확인
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          missing=""
+          [ -n "$SERVER_HOST" ]         || missing="$missing SERVER_HOST"
+          [ -n "$SERVER_USER" ]         || missing="$missing SERVER_USER"
+          [ -n "$SERVER_SSH_KEY" ]      || missing="$missing SERVER_SSH_KEY"
+          [ -n "$DOCKERHUB_USERNAME" ]  || missing="$missing DOCKERHUB_USERNAME"
+
+          if [ -n "$missing" ]; then
+            echo "::error::이 저장소에 등록되지 않은 Secret:$missing"
+            echo ""
+            echo "Settings > Secrets and variables > Actions 에서 등록한다."
+            echo "Secrets 탭이다. 옆의 Variables 탭에 넣으면 여기서 안 보인다."
+            echo "Secret 은 저장소마다 따로다. 다른 저장소에 넣은 값은 넘어오지 않는다."
+            exit 1
+          fi
+          echo "OK (SERVER_PORT 는 없으면 22)"
+
+      # scp-action 은 OS 확인용과 전송용으로 SSH 를 두 번 연결한다.
+      # 짧은 간격의 두 번째 접속이 공유기 보안 기능에 차단돼 i/o timeout 이 난다.
+      # compose 파일을 base64 로 실어 보내 SSH 연결을 1회로 줄인다.
+      - name: Encode compose file
+        id: enc
+        run: echo "b64=$(base64 -w0 docker-compose.prod.yml)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy over a single SSH session
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          COMPOSE_B64: ${{ steps.enc.outputs.b64 }}
+          DOMAIN: ${{ env.DOMAIN }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || '22' }}
+          envs: COMPOSE_B64,DOMAIN
+          script: |
+            set -e
+            mkdir -p ~/weekly-report
+            cd ~/weekly-report
+
+            printf %s "$COMPOSE_B64" | base64 -d > docker-compose.prod.yml
+
+            # DB 비밀번호는 서버에만 둔다. CI 가 만들지 않는다.
+            #
+            # postgres 는 볼륨을 처음 만들 때의 비밀번호로 계정을 굳힌다.
+            # 배포마다 새로 생성하면 다음 배포에서 인증 실패로 기동하지 못한다.
+            # 최초 1회만 손으로 배치하고 이후 건드리지 않는다.
+            if [ ! -f .env.secrets ]; then
+              echo "::error::~/weekly-report/.env.secrets 가 없습니다."
+              echo "서버에서 최초 1회 생성해야 합니다. docs/deployment.md 의 '최초 설정'을 보세요."
+              exit 1
+            fi
+
+            # 여기에는 비밀이 아닌 배포 파라미터만 들어간다.
+            # 배포마다 최신값으로 덮어쓴다.
+            umask 077
+            cat > .env.deploy <<EOF
+            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+            IMAGE_TAG=${{ github.sha }}
+            APP_CORS_ALLOWED_ORIGINS=https://$DOMAIN
+            EOF
+
+            # edge 저장소가 만드는 공용 네트워크. 없으면 up 이 실패하므로 여기서 보장한다.
+            docker network inspect edge-net >/dev/null 2>&1 || docker network create edge-net
+
+            COMPOSE="docker compose -f docker-compose.prod.yml --env-file .env.secrets --env-file .env.deploy"
+
+            $COMPOSE pull
+            $COMPOSE up -d --remove-orphans
+
+            # 기동 확인 (최대 150초).
+            #
+            # edge 를 거쳐 실제 경로 전체를 확인한다.
+            # TLS 종단 → edge 라우팅 → weekly-report-web → backend → DB 가 살아있는지 본다.
+            #
+            # edge 는 SNI(TLS 핸드셰이크에 실려 오는 도메인)로 server 블록을 고른다.
+            # -H "Host:" 만 붙이면 SNI 는 localhost 로 나가 기본 서버에 걸리고,
+            # HTTP/2 는 그 불일치를 거부해 PROTOCOL_ERROR 가 난다.
+            # --resolve 는 도메인을 그대로 쓰되 접속만 루프백으로 돌려서,
+            # SNI 를 올바르게 보내면서도 DNS 나 공유기 헤어핀에 의존하지 않는다.
+            # -k 는 인증서 검증만 건너뛴다.
+            echo "헬스체크 시작..."
+            for i in $(seq 1 30); do
+              if curl -fsSk --resolve "$DOMAIN:443:127.0.0.1" \
+                   "https://$DOMAIN/actuator/health" | grep -q '"status":"UP"'; then
+                echo "배포 성공 (${i}회차에서 응답 확인)"
+                $COMPOSE ps
+                docker image prune -f
+                exit 0
+              fi
+              sleep 5
+            done
+
+            echo "::error::헬스체크 실패 - 컨테이너가 정상 기동하지 않았습니다"
+            echo ""
+            echo "edge 에 weekly-report.conf 가 반영되어 있고"
+            echo "/etc/edge/certs/weekly-report/ 에 인증서가 있는지 먼저 확인하세요."
+            $COMPOSE ps
+            $COMPOSE logs --tail 50 backend
+            exit 1

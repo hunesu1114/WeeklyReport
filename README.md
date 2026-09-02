@@ -118,13 +118,31 @@ cd backend && mvn test
 
 ---
 
+## 배포
+
+`master` 에 push 하면 GitHub Actions 가 테스트 → 이미지 빌드 → 서버 배포까지 합니다.
+운영은 <https://weekly-report-mik.duckdns.org> 이고, 앞단 edge 프록시가 TLS 를 끝내고
+도메인을 보고 이 앱으로 넘깁니다. 앱 컨테이너는 호스트 포트를 열지 않습니다.
+
+서버 최초 설정(인증서 발급 · DB 비밀번호 배치 · GitHub Secrets)은
+[docs/deployment.md](docs/deployment.md) 를 보세요.
+
+---
+
 ## 프로젝트 구조
 
 ```
 .
-├─ docker-compose.yml
+├─ docker-compose.yml         # 개발용
+├─ docker-compose.prod.yml    # 배포용 (CI 가 서버로 보낸다)
 ├─ .env.example
-├─ docs/TEMPLATES.md          # 양식 확장 설계 메모
+├─ .github/workflows/deploy.yml
+├─ deploy/
+│  ├─ edge/weekly-report.conf # edge 저장소 conf.d/ 에 넣을 사이트 설정
+│  └─ env.secrets.example     # 서버 ~/weekly-report/.env.secrets 템플릿
+├─ docs/
+│  ├─ TEMPLATES.md            # 양식 확장 설계 메모
+│  └─ deployment.md           # 배포 · 서버 최초 설정
 ├─ backend/
 │  ├─ Dockerfile
 │  └─ src/main/

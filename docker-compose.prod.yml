@@ -1,0 +1,101 @@
+# 배포용 구성.
+#
+#   docker compose -f docker-compose.prod.yml \
+#     --env-file .env.secrets --env-file .env.deploy pull
+#   docker compose -f docker-compose.prod.yml \
+#     --env-file .env.secrets --env-file .env.deploy up -d
+#
+# CI/CD 가 이 파일을 서버로 보내고 .env.deploy 를 생성한다
+# (.github/workflows/deploy.yml 참고).
+#
+# .env.secrets 는 CI 가 만들지 않는다. 서버에 손으로 한 번 두고 그대로 둔다.
+# DB 비밀번호가 배포마다 바뀌면 이미 만들어진 postgres 볼륨의 계정과 어긋나
+# 기동이 실패한다. 자세한 내용은 docs/deployment.md 참고.
+#
+# 개발용 docker-compose.yml 과 분리했다. 한 파일에 프로필로 섞으면
+# 개발 중 실수로 운영 컨테이너를 띄우거나 그 반대의 사고가 난다.
+
+# 프로젝트 이름을 개발용(weekly-report)과 분리한다.
+# 같은 이름을 쓰면 compose 가 개발용 볼륨을 그대로 재사용해
+# 개발 비밀번호가 남아 있는 DB 에 붙으려다 인증 실패로 죽는다.
+name: weekly-report-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: weekly-report-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-weekly_report}
+      POSTGRES_USER: ${POSTGRES_USER:-weekly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.secrets}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # 호스트 포트를 열지 않는다. 외부에서 DB 에 직접 붙을 이유가 없다.
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-weekly} -d ${POSTGRES_DB:-weekly_report}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    image: ${DOCKERHUB_USERNAME}/weekly-report-backend:${IMAGE_TAG:-latest}
+    container_name: weekly-report-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # 컨테이너 이름이 곧 호스트명이다. localhost 를 쓰면 자기 자신을 가리켜 실패한다.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-weekly_report}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-weekly}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.secrets}
+
+      # edge → weekly-report-web → backend 로 전부 같은 오리진이라 실제로는 CORS 가
+      # 발생하지 않는다. 그래도 값을 채워 두어 브라우저가 직접 부르는 경우에 대비한다.
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://weekly-report-mik.duckdns.org}
+
+      TZ: Asia/Seoul
+    networks:
+      # 외부와 통신할 일이 없다. edge 는 web 만 찾아오면 된다.
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    # 헬스체크는 이미지에 들어 있다(backend/Dockerfile).
+
+  web:
+    image: ${DOCKERHUB_USERNAME}/weekly-report-web:${IMAGE_TAG:-latest}
+    # edge 프록시가 이 이름으로 찾아온다. 바꾸면 edge 설정도 함께 고쳐야 한다.
+    container_name: weekly-report-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Seoul
+    networks:
+      # backend 를 부르기 위한 내부망과, edge 가 찾아오는 공용망 양쪽에 붙는다.
+      - internal
+      - edge-net
+    security_opt:
+      - no-new-privileges:true
+    # 호스트 포트를 열지 않는다. 외부 노출은 edge 프록시만 담당한다.
+
+networks:
+  internal:
+    driver: bridge
+
+  # edge 저장소에서 만든 공용 네트워크.
+  #   docker network create edge-net
+  # 이게 없으면 up 이 실패한다.
+  edge-net:
+    name: edge-net
+    external: true
+
+volumes:
+  postgres-data:

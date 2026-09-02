@@ -35,12 +35,8 @@ services:
       TZ: Asia/Seoul
     ports:
       - "${BACKEND_PORT:-8081}:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 40s
+    # 헬스체크는 이미지에 들어 있다(backend/Dockerfile).
+    # Spring 기동 + Flyway 마이그레이션 때문에 start_period 가 넉넉히 잡혀 있다.
     restart: unless-stopped
 
   frontend:
