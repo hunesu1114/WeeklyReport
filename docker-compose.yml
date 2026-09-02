@@ -23,7 +23,9 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: weekly-report-api
+    # 이름을 운영과 맞춘다. frontend 의 nginx 가 이 이름으로 찾아오기 때문이다
+    # (짧은 이름 'backend' 는 공용망에서 다른 앱과 충돌한다).
+    container_name: weekly-report-backend
     depends_on:
       db:
         condition: service_healthy
