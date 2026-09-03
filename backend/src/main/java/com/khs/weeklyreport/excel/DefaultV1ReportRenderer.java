@@ -35,7 +35,7 @@ import java.util.List;
  *   B:F     비고 | (내용)
  *   (빈 줄)
  *   B:F     차주 진행 예정 ( 2026. 05. 18  ~ 2026. 05. 22 )
- *   B:F     NO | 업무명 |   | 진행상태 | 소요시간(H)
+ *   B:F     NO | 업무명 | 업무상세 | 진행상태 | 소요시간(H)
  *   ...     항목들 (소요시간 칸은 회색으로 막아둔다)
  * </pre>
  */
@@ -86,7 +86,7 @@ public class DefaultV1ReportRenderer implements ReportRenderer {
 
             rowIndex = writeSectionHeader(sheet, styles, rowIndex,
                     "금주 진행 내용 " + range(report.getThisWeekStart(), report.getThisWeekEnd()));
-            rowIndex = writeTableHeader(sheet, styles, rowIndex, "업무상세");
+            rowIndex = writeTableHeader(sheet, styles, rowIndex);
 
             int firstItemRow = rowIndex;
             ItemsWritten thisWeek = writeItems(sheet, styles,
@@ -100,7 +100,7 @@ public class DefaultV1ReportRenderer implements ReportRenderer {
 
             rowIndex = writeSectionHeader(sheet, styles, rowIndex,
                     "차주 진행 예정 " + range(report.getNextWeekStart(), report.getNextWeekEnd()));
-            rowIndex = writeTableHeader(sheet, styles, rowIndex, " ");
+            rowIndex = writeTableHeader(sheet, styles, rowIndex);
             writeItems(sheet, styles, report.itemsOf(ReportSection.NEXT_WEEK), rowIndex, false);
 
             sheet.setForceFormulaRecalculation(true);
@@ -145,11 +145,11 @@ public class DefaultV1ReportRenderer implements ReportRenderer {
         return rowIndex + 1;
     }
 
-    private int writeTableHeader(XSSFSheet sheet, ExcelStyleKit styles, int rowIndex, String detailHeader) {
+    private int writeTableHeader(XSSFSheet sheet, ExcelStyleKit styles, int rowIndex) {
         Row row = newRow(sheet, rowIndex, TABLE_HEADER_ROW_HEIGHT);
         cell(row, COL_NO, styles.tableHeader).setCellValue("NO");
         cell(row, COL_TASK, styles.tableHeader).setCellValue("업무명");
-        cell(row, COL_DETAIL, styles.tableHeader).setCellValue(detailHeader);
+        cell(row, COL_DETAIL, styles.tableHeader).setCellValue("업무상세");
         cell(row, COL_STATUS, styles.tableHeader).setCellValue("진행상태");
         cell(row, COL_HOURS, styles.tableHeader).setCellValue("소요시간(H)");
         return rowIndex + 1;

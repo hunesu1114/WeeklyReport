@@ -87,7 +87,7 @@ const excluded = computed(() => roundHours((Number(props.form.baseHours) || 0) -
         <tr>
           <th class="cell cell--head">NO</th>
           <th class="cell cell--head">업무명</th>
-          <th class="cell cell--head"></th>
+          <th class="cell cell--head">업무상세</th>
           <th class="cell cell--head">진행상태</th>
           <th class="cell cell--head">소요시간(H)</th>
         </tr>

@@ -55,7 +55,7 @@ class DefaultV1ReportRendererTest {
             assertThat(text(sheet, 11, 1)).isEqualTo("비고");
             assertThat(text(sheet, 11, 2)).isEqualTo("5/1, 5/5 공휴일로 인해 24H 근무");
             assertThat(text(sheet, 13, 1)).isEqualTo("차주 진행 예정 ( 2026. 05. 18  ~ 2026. 05. 22 )");
-            assertThat(text(sheet, 14, 3)).isEqualTo(" ");
+            assertThat(text(sheet, 14, 3)).isEqualTo("업무상세");
             assertThat(text(sheet, 15, 2)).isEqualTo("포탈 v3, v2 테스트");
             assertThat(text(sheet, 15, 4)).isEqualTo("예정");
         }
