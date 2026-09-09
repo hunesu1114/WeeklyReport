@@ -1,5 +1,6 @@
 package com.khs.weeklyreport.web;
 
+import com.khs.weeklyreport.service.AccessDeniedException;
 import com.khs.weeklyreport.service.NotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(NotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body(e.getMessage(), null));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleForbidden(AccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body(e.getMessage(), null));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

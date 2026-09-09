@@ -29,6 +29,13 @@ export const useKanbanStore = defineStore('kanban', () => {
     await Promise.all([loadProjects(true), loadDueSoon()])
   }
 
+  /** 로그아웃할 때. 다음 사람에게 앞사람 데이터가 남아 보이면 안 된다. */
+  function reset() {
+    projects.value = []
+    dueSoon.value = []
+    loaded.value = false
+  }
+
   /** 마지막으로 보던 보드를 기억해 두었다가 다음에 그대로 연다. */
   function rememberProject(id) {
     try {
@@ -56,6 +63,7 @@ export const useKanbanStore = defineStore('kanban', () => {
     loadProjects,
     loadDueSoon,
     refresh,
+    reset,
     rememberProject,
     lastProjectId,
   }

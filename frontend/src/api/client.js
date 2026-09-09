@@ -5,11 +5,42 @@ const http = axios.create({
   timeout: 20000,
 })
 
+/**
+ * 로그인 토큰. 스토어가 값을 넣어주고, 여기서는 헤더에 싣기만 한다.
+ * 스토어를 직접 import 하면 순환 참조가 생긴다.
+ */
+let authToken = null
+
+export function setAuthToken(token) {
+  authToken = token || null
+}
+
+/** 토큰이 만료되면 화면이 로그인으로 돌아가야 한다. main.js 가 콜백을 심는다. */
+let onUnauthorized = null
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler
+}
+
+http.interceptors.request.use((config) => {
+  if (authToken) {
+    config.headers.Authorization = `Bearer ${authToken}`
+  }
+  return config
+})
+
 /** 서버가 내려주는 message 를 사람이 읽을 수 있는 에러로 바꾼다. */
 http.interceptors.response.use(
   (response) => response,
   (error) => {
+    const status = error.response?.status
     const data = error.response?.data
+
+    // 토큰이 없거나 만료됐다. 로그인 시도 자체가 실패한 경우는 제외한다.
+    if (status === 401 && !error.config?.url?.includes('/auth/')) {
+      onUnauthorized?.()
+    }
+
     let message = data?.message || error.message || '알 수 없는 오류가 발생했습니다.'
     if (data?.fields) {
       message += ' (' + Object.entries(data.fields).map(([k, v]) => `${k}: ${v}`).join(', ') + ')'
@@ -17,6 +48,19 @@ http.interceptors.response.use(
     return Promise.reject(new Error(message))
   },
 )
+
+export const authApi = {
+  setupState: () => http.get('/auth/setup-state').then((r) => r.data),
+  register: (payload) => http.post('/auth/register', payload).then((r) => r.data),
+  login: (payload) => http.post('/auth/login', payload).then((r) => r.data),
+  me: () => http.get('/auth/me').then((r) => r.data),
+  changePassword: (payload) => http.post('/auth/password', payload),
+
+  /** 주인 없는 데이터 현황 */
+  orphans: () => http.get('/auth/orphans').then((r) => r.data),
+  /** 주인 없는 데이터를 지금 계정으로 가져오기 (관리자만) */
+  claimOrphans: () => http.post('/auth/orphans/claim').then((r) => r.data),
+}
 
 export const reportApi = {
   list: (params) => http.get('/reports', { params }).then((r) => r.data),

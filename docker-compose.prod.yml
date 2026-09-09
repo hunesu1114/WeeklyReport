@@ -60,6 +60,11 @@ services:
       # 발생하지 않는다. 그래도 값을 채워 두어 브라우저가 직접 부르는 경우에 대비한다.
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://weekly-report-mik.duckdns.org}
 
+      # 로그인 토큰 서명 키. .env.secrets 에 둔다.
+      # 비워두면 기동할 때마다 임시 키가 만들어져 모두 로그아웃된다.
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-}
+      APP_JWT_TTL: ${APP_JWT_TTL:-12h}
+
       TZ: Asia/Seoul
     networks:
       # 외부와 통신할 일이 없다. edge 는 web 만 찾아오면 된다.

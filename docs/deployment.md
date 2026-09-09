@@ -138,7 +138,7 @@ mkdir -p ~/weekly-report && cd ~/weekly-report
 ```
 
 ```bash
-umask 077 && printf 'POSTGRES_DB=weekly_report\nPOSTGRES_USER=weekly\nPOSTGRES_PASSWORD=%s\n' "$(openssl rand -base64 24)" > .env.secrets
+umask 077 && printf 'POSTGRES_DB=weekly_report\nPOSTGRES_USER=weekly\nPOSTGRES_PASSWORD=%s\nAPP_JWT_SECRET=%s\n' "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" > .env.secrets
 ```
 
 ```bash
@@ -148,7 +148,16 @@ chmod 600 .env.secrets && cat .env.secrets
 > **이 파일은 배포마다 새로 만들면 안 된다.**
 > postgres 는 볼륨을 처음 만들 때의 비밀번호로 계정을 굳힌다. 이후 환경변수만 바꿔도
 > DB 안의 비밀번호는 그대로라, 다음 배포에서 인증 실패로 기동하지 못한다.
+> `APP_JWT_SECRET` 도 같다. 값이 바뀌면 발급해둔 로그인 토큰이 전부 무효가 된다.
 > 그래서 CI 가 만들지 않고 서버에 한 번만 둔다. 템플릿은 `deploy/env.secrets.example`.
+
+> **이미 `.env.secrets` 가 있는 서버라면** `APP_JWT_SECRET` 한 줄만 덧붙인다.
+> 없어도 앱은 뜨지만 기동할 때마다 임시 키가 만들어져, 재배포·재시작 때마다
+> 로그인이 전부 풀린다(로그에 경고가 크게 찍힌다).
+>
+> ```bash
+> cd ~/weekly-report && printf 'APP_JWT_SECRET=%s\n' "$(openssl rand -base64 32)" >> .env.secrets
+> ```
 
 ### 4. GitHub Secrets 등록
 
@@ -224,6 +233,8 @@ cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.
 | `--install-cert` 가 `Permission denied` | 인증서 디렉터리가 root 소유다. 위 2번의 주석 참고 |
 | 60~90일 뒤 갑자기 인증서 만료 | 갱신 cron 이 인증서 디렉터리에 못 쓰고 있다. `acme.sh --list` 와 소유자 확인 |
 | 백엔드가 DB 인증 실패로 재시작 | `.env.secrets` 를 다시 만들었다. 아래 "DB 비밀번호를 잃어버렸을 때" |
+| 재배포·재시작할 때마다 로그아웃됨 | `.env.secrets` 에 `APP_JWT_SECRET` 이 없다. 위 3번 참고 |
+| API 가 전부 401 | 토큰이 만료됐거나 없다. 화면이 로그인으로 돌려보낸다 |
 | 엉뚱한 사이트가 뜬다 | 해당 도메인의 server 블록이 없어 edge 기본 서버로 갔다 |
 
 ```bash

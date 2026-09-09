@@ -7,6 +7,7 @@ import com.khs.weeklyreport.domain.ReportTemplate;
 import com.khs.weeklyreport.repository.ReportItemRepository;
 import com.khs.weeklyreport.repository.ReportRepository;
 import com.khs.weeklyreport.repository.ReportTemplateRepository;
+import com.khs.weeklyreport.security.CurrentUser;
 import com.khs.weeklyreport.web.dto.ReportDtos;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,20 +32,24 @@ public class ReportService {
     private final ReportItemRepository reportItemRepository;
     private final ReportTemplateRepository templateRepository;
     private final WeekCalculator weekCalculator;
+    private final CurrentUser currentUser;
 
     public ReportService(ReportRepository reportRepository,
                          ReportItemRepository reportItemRepository,
                          ReportTemplateRepository templateRepository,
-                         WeekCalculator weekCalculator) {
+                         WeekCalculator weekCalculator,
+                         CurrentUser currentUser) {
         this.reportRepository = reportRepository;
         this.reportItemRepository = reportItemRepository;
         this.templateRepository = templateRepository;
         this.weekCalculator = weekCalculator;
+        this.currentUser = currentUser;
     }
 
     @Transactional(readOnly = true)
     public Page<ReportDtos.ReportSummary> search(String query, Pageable pageable) {
-        return reportRepository.search(likePattern(query), pageable).map(ReportDtos.ReportSummary::from);
+        return reportRepository.search(likePattern(query), currentUser.requireId(), pageable)
+                .map(ReportDtos.ReportSummary::from);
     }
 
     @Transactional(readOnly = true)
@@ -52,15 +57,22 @@ public class ReportService {
         return ReportDtos.ReportDetail.from(load(id));
     }
 
+    /**
+     * 내 보고서만 꺼낸다.
+     *
+     * <p>남의 보고서를 찾을 때도 '없음'으로 답한다. '권한 없음'이라고 알려주면
+     * 그 id 가 존재한다는 사실이 새어 나간다.
+     */
     @Transactional(readOnly = true)
     public Report load(Long id) {
-        return reportRepository.findById(id)
+        return reportRepository.findByIdAndOwnerId(id, currentUser.requireId())
                 .orElseThrow(() -> new NotFoundException("보고서를 찾을 수 없습니다. id=" + id));
     }
 
     @Transactional
     public ReportDtos.ReportDetail create(ReportDtos.SaveRequest request) {
         Report report = new Report();
+        report.setOwner(currentUser.requireEntity());
         apply(report, request);
         return ReportDtos.ReportDetail.from(reportRepository.save(report));
     }
@@ -74,10 +86,7 @@ public class ReportService {
 
     @Transactional
     public void delete(Long id) {
-        if (!reportRepository.existsById(id)) {
-            throw new NotFoundException("보고서를 찾을 수 없습니다. id=" + id);
-        }
-        reportRepository.deleteById(id);
+        reportRepository.delete(load(id));
     }
 
     /**
@@ -90,6 +99,7 @@ public class ReportService {
         LocalDate reportDate = source.getReportDate().plusWeeks(1);
 
         Report next = new Report();
+        next.setOwner(source.getOwner());
         next.setReportDate(reportDate);
         next.setAuthorName(source.getAuthorName());
         next.setTitleOverride(source.getTitleOverride());
@@ -120,19 +130,23 @@ public class ReportService {
     @Transactional(readOnly = true)
     public ReportDtos.ReportDefaults defaults(LocalDate reportDate, String authorName) {
         LocalDate base = reportDate == null ? LocalDate.now() : reportDate;
+        Long ownerId = currentUser.requireId();
 
         Optional<Report> previous = (authorName == null || authorName.isBlank())
-                ? reportRepository.findFirstByOrderByReportDateDescIdDesc()
-                : reportRepository.findFirstByAuthorNameOrderByReportDateDescIdDesc(authorName.trim());
+                ? reportRepository.findFirstByOwnerIdOrderByReportDateDescIdDesc(ownerId)
+                : reportRepository.findFirstByOwnerIdAndAuthorNameOrderByReportDateDescIdDesc(
+                        ownerId, authorName.trim());
 
         List<ReportDtos.ItemPayload> carried = new ArrayList<>();
         previous.ifPresent(prev -> prev.itemsOf(ReportSection.NEXT_WEEK).forEach(item ->
                 carried.add(new ReportDtos.ItemPayload(null, ReportSection.THIS_WEEK,
                         item.getTaskName(), item.getDetail(), "진행", null))));
 
+        // 이름을 안 주면 직전 보고서, 그것도 없으면 계정의 표시 이름을 쓴다
         String resolvedAuthor = (authorName != null && !authorName.isBlank())
                 ? authorName.trim()
-                : previous.map(Report::getAuthorName).orElse("");
+                : previous.map(Report::getAuthorName)
+                        .orElseGet(() -> currentUser.requireEntity().getDisplayName());
 
         String templateKey = previous.map(Report::getTemplateKey)
                 .orElseGet(() -> templateRepository.findByActiveTrueOrderBySortOrderAscIdAsc().stream()
@@ -154,18 +168,20 @@ public class ReportService {
     @Transactional(readOnly = true)
     public List<String> statusOptions() {
         Set<String> merged = new LinkedHashSet<>(DEFAULT_STATUSES);
-        merged.addAll(reportItemRepository.findUsedStatuses());
+        merged.addAll(reportItemRepository.findUsedStatuses(currentUser.requireId()));
         return List.copyOf(merged);
     }
 
     @Transactional(readOnly = true)
     public List<String> taskNameSuggestions(String query) {
-        return reportItemRepository.findTaskNameSuggestions(likePattern(query)).stream().limit(30).toList();
+        return reportItemRepository
+                .findTaskNameSuggestions(likePattern(query), currentUser.requireId())
+                .stream().limit(30).toList();
     }
 
     @Transactional(readOnly = true)
     public List<String> authors() {
-        return reportRepository.findDistinctAuthorNames();
+        return reportRepository.findDistinctAuthorNames(currentUser.requireId());
     }
 
     private void apply(Report report, ReportDtos.SaveRequest request) {
@@ -201,7 +217,7 @@ public class ReportService {
         report.replaceItems(items);
     }
 
-/**
+    /**
      * 검색어를 소문자 LIKE 패턴으로 바꾼다. 검색어가 없으면 "%" 라서 전건이 걸린다.
      * null 을 그대로 바인딩하면 PostgreSQL 이 파라미터 타입을 추론하지 못한다.
      */

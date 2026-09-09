@@ -6,6 +6,7 @@ import com.khs.weeklyreport.domain.KanbanStatus;
 import com.khs.weeklyreport.domain.Project;
 import com.khs.weeklyreport.repository.KanbanCardRepository;
 import com.khs.weeklyreport.repository.ProjectRepository;
+import com.khs.weeklyreport.security.CurrentUser;
 import com.khs.weeklyreport.web.dto.KanbanDtos;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +33,14 @@ public class KanbanService {
 
     private final ProjectRepository projectRepository;
     private final KanbanCardRepository cardRepository;
+    private final CurrentUser currentUser;
 
-    public KanbanService(ProjectRepository projectRepository, KanbanCardRepository cardRepository) {
+    public KanbanService(ProjectRepository projectRepository,
+                         KanbanCardRepository cardRepository,
+                         CurrentUser currentUser) {
         this.projectRepository = projectRepository;
         this.cardRepository = cardRepository;
+        this.currentUser = currentUser;
     }
 
     // ── 프로젝트 ──────────────────────────────────────────────
@@ -43,22 +48,25 @@ public class KanbanService {
     @Transactional(readOnly = true)
     public List<KanbanDtos.ProjectView> projects(boolean activeOnly) {
         LocalDate today = LocalDate.now();
+        Long ownerId = currentUser.requireId();
         List<Project> projects = activeOnly
-                ? projectRepository.findByActiveTrueOrderBySortOrderAscNameAsc()
-                : projectRepository.findAllByOrderBySortOrderAscNameAsc();
+                ? projectRepository.findByOwnerIdAndActiveTrueOrderBySortOrderAscNameAsc(ownerId)
+                : projectRepository.findByOwnerIdOrderBySortOrderAscNameAsc(ownerId);
         return projects.stream().map(project -> toProjectView(project, today)).toList();
     }
 
     @Transactional
     public KanbanDtos.ProjectView createProject(KanbanDtos.ProjectRequest request) {
-        if (projectRepository.existsByNameIgnoreCase(request.name().trim())) {
+        Long ownerId = currentUser.requireId();
+        if (projectRepository.existsByOwnerIdAndName(ownerId, request.name().trim())) {
             throw new IllegalArgumentException("이미 있는 프로젝트 이름입니다: " + request.name().trim());
         }
         Project project = new Project();
+        project.setOwner(currentUser.requireEntity());
         apply(project, request);
         if (request.sortOrder() == null) {
             // 새 프로젝트는 목록 맨 뒤에 붙인다
-            project.setSortOrder((int) projectRepository.count());
+            project.setSortOrder((int) projectRepository.countByOwnerId(ownerId));
         }
         return toProjectView(projectRepository.save(project), LocalDate.now());
     }
@@ -67,7 +75,8 @@ public class KanbanService {
     public KanbanDtos.ProjectView updateProject(Long id, KanbanDtos.ProjectRequest request) {
         Project project = loadProject(id);
         String name = request.name().trim();
-        if (!project.getName().equalsIgnoreCase(name) && projectRepository.existsByNameIgnoreCase(name)) {
+        if (!project.getName().equalsIgnoreCase(name)
+                && projectRepository.existsByOwnerIdAndName(currentUser.requireId(), name)) {
             throw new IllegalArgumentException("이미 있는 프로젝트 이름입니다: " + name);
         }
         apply(project, request);
@@ -77,10 +86,7 @@ public class KanbanService {
     /** 프로젝트를 지우면 그 보드의 카드도 함께 사라진다. */
     @Transactional
     public void deleteProject(Long id) {
-        if (!projectRepository.existsById(id)) {
-            throw new NotFoundException("프로젝트를 찾을 수 없습니다. id=" + id);
-        }
-        projectRepository.deleteById(id);
+        projectRepository.delete(loadProject(id));
     }
 
     // ── 보드 ─────────────────────────────────────────────────
@@ -185,7 +191,7 @@ public class KanbanService {
     public List<KanbanDtos.CardView> dueSoon(Integer days) {
         int window = days == null ? DUE_SOON_DAYS : Math.max(0, days);
         LocalDate today = LocalDate.now();
-        return cardRepository.findDueUntil(today.plusDays(window)).stream()
+        return cardRepository.findDueUntil(today.plusDays(window), currentUser.requireId()).stream()
                 .sorted(BY_URGENCY)
                 .map(card -> KanbanDtos.CardView.of(card, today, window))
                 .toList();
@@ -198,9 +204,10 @@ public class KanbanService {
             throw new IllegalArgumentException("조회 기간(from, to)이 필요합니다.");
         }
         LocalDate today = LocalDate.now();
+        Long ownerId = currentUser.requireId();
         List<KanbanCard> cards = projectId == null
-                ? cardRepository.findStartedBetween(from, to)
-                : cardRepository.findStartedBetweenInProject(from, to, projectId);
+                ? cardRepository.findStartedBetween(from, to, ownerId)
+                : cardRepository.findStartedBetweenInProject(from, to, projectId, ownerId);
         return cards.stream().map(card -> KanbanDtos.CardView.of(card, today, DUE_SOON_DAYS)).toList();
     }
 
@@ -219,14 +226,24 @@ public class KanbanService {
         cardRepository.saveAll(cards);
     }
 
+    /**
+     * 내 프로젝트만 꺼낸다. 남의 것을 찾을 때도 '없음'으로 답한다.
+     * '권한 없음'이라고 알려주면 그 id 가 존재한다는 사실이 새어 나간다.
+     */
     private Project loadProject(Long id) {
-        return projectRepository.findById(id)
+        return projectRepository.findByIdAndOwnerId(id, currentUser.requireId())
                 .orElseThrow(() -> new NotFoundException("프로젝트를 찾을 수 없습니다. id=" + id));
     }
 
+    /** 카드의 주인은 그 카드가 속한 프로젝트의 주인이다. */
     private KanbanCard loadCard(Long id) {
-        return cardRepository.findById(id)
+        KanbanCard card = cardRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("카드를 찾을 수 없습니다. id=" + id));
+        Long ownerId = card.getProject().getOwner() == null ? null : card.getProject().getOwner().getId();
+        if (!currentUser.requireId().equals(ownerId)) {
+            throw new NotFoundException("카드를 찾을 수 없습니다. id=" + id);
+        }
+        return card;
     }
 
     private void apply(Project project, KanbanDtos.ProjectRequest request) {

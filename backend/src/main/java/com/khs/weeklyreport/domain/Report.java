@@ -26,6 +26,14 @@ public class Report {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * 이 보고서의 주인. 로그인 도입 이전에 쌓인 행은 비어 있고,
+     * 첫 관리자 계정이 /api/auth/orphans/claim 으로 가져간다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    private AppUser owner;
+
     /** 보고서를 제출하는 날짜. 파일명 접미사이자 주차 계산의 기준점. */
     @Column(name = "report_date", nullable = false)
     private LocalDate reportDate;

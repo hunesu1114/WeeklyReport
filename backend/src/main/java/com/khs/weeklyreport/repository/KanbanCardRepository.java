@@ -11,6 +11,7 @@ import java.util.List;
 
 public interface KanbanCardRepository extends JpaRepository<KanbanCard, Long> {
 
+    /** 보드 조회. 프로젝트 소유권은 서비스에서 먼저 확인한다. */
     List<KanbanCard> findByProjectIdOrderByStatusAscSortOrderAscIdAsc(Long projectId);
 
     /**
@@ -23,12 +24,13 @@ public interface KanbanCardRepository extends JpaRepository<KanbanCard, Long> {
     @Query("""
             select c from KanbanCard c
             join fetch c.project p
-            where c.dueDate is not null
+            where p.owner.id = :ownerId
+              and c.dueDate is not null
               and c.status <> com.khs.weeklyreport.domain.KanbanStatus.DONE
               and c.dueDate <= :until
             order by c.dueDate asc, c.id asc
             """)
-    List<KanbanCard> findDueUntil(@Param("until") LocalDate until);
+    List<KanbanCard> findDueUntil(@Param("until") LocalDate until, @Param("ownerId") Long ownerId);
 
     /**
      * 시작일이 주어진 기간 안에 있는 카드. 주간보고의 '금주 기간' 연동에 쓴다.
@@ -40,23 +42,28 @@ public interface KanbanCardRepository extends JpaRepository<KanbanCard, Long> {
     @Query("""
             select c from KanbanCard c
             join fetch c.project p
-            where c.startDate is not null
+            where p.owner.id = :ownerId
+              and c.startDate is not null
               and c.startDate between :from and :to
             order by p.sortOrder asc, p.name asc, c.startDate asc, c.id asc
             """)
-    List<KanbanCard> findStartedBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
+    List<KanbanCard> findStartedBetween(@Param("from") LocalDate from,
+                                        @Param("to") LocalDate to,
+                                        @Param("ownerId") Long ownerId);
 
     @Query("""
             select c from KanbanCard c
             join fetch c.project p
-            where c.startDate is not null
+            where p.owner.id = :ownerId
+              and c.startDate is not null
               and c.startDate between :from and :to
               and p.id = :projectId
             order by c.startDate asc, c.id asc
             """)
     List<KanbanCard> findStartedBetweenInProject(@Param("from") LocalDate from,
                                                  @Param("to") LocalDate to,
-                                                 @Param("projectId") Long projectId);
+                                                 @Param("projectId") Long projectId,
+                                                 @Param("ownerId") Long ownerId);
 
     /** 같은 칸의 마지막 순번. 새 카드는 맨 아래에 붙인다. */
     @Query("""

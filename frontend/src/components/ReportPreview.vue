@@ -107,10 +107,18 @@ const excluded = computed(() => roundHours((Number(props.form.baseHours) || 0) -
 </template>
 
 <style scoped>
+/*
+ * 이 패널은 실제 엑셀 파일의 모습을 흉내 낸 것이다.
+ * 그래서 앱의 라이트/다크 테마를 따르지 않고 항상 흰 종이로 둔다.
+ * 색을 토큰으로 쓰면 다크에서 흰 배경 위에 밝은 글자가 얹혀 읽을 수 없게 된다.
+ */
 .preview {
   overflow-x: auto;
   padding: 14px;
   background: #fff;
+  color: #14171c;
+  color-scheme: light;
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 .sheet {
@@ -168,13 +176,13 @@ const excluded = computed(() => roundHours((Number(props.form.baseHours) || 0) -
 }
 
 .cell--negative {
-  color: var(--danger);
+  color: #dc2626;
   font-weight: 700;
 }
 
 .cell--empty {
   text-align: center;
-  color: var(--text-4);
+  color: #9aa2ae;
   padding: 14px;
 }
 

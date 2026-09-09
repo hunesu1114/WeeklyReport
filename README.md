@@ -79,6 +79,13 @@ docker compose down -v       # DB 데이터까지
 그 항목의 업무상세에 줄만 덧붙입니다. 카드 상태는 `[진행] / [완료] / [예정]` 태그로,
 내용은 하위 불릿으로 변환됩니다.
 
+### 계정
+
+- **아이디/비밀번호 로그인** — Spring Security + JWT. 토큰은 브라우저에 보관하고
+  만료되면 자동으로 로그인 화면으로 돌아갑니다.
+- **가장 먼저 가입한 계정이 관리자**가 됩니다. 그 계정만 주인 없는 데이터를 가져올 수 있습니다.
+- **데이터는 계정별로 분리됩니다.** 보고서·프로젝트·카드 모두 본인 것만 보입니다.
+
 ### 화면
 
 - **라이트 / 다크 모드** — 헤더 오른쪽 버튼으로 전환합니다. 고르기 전에는 OS 설정을 따릅니다.
@@ -124,6 +131,18 @@ cd backend && mvn test
 | `POST` | `/api/reports/{id}/follow-up` | 차주 예정을 금주로 옮긴 다음 주 보고서 생성 |
 | `GET` | `/api/reports/{id}/export?templateKey=` | **xlsx 다운로드** |
 | `GET` | `/api/meta/templates` `\|` `/statuses` `\|` `/task-names` `\|` `/authors` | 화면 보조 데이터 |
+
+인증 (`/api/auth` 외의 모든 `/api/**` 는 `Authorization: Bearer <token>` 이 필요합니다):
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| `GET` | `/api/auth/setup-state` | 가입한 계정이 있는지 (공개) |
+| `POST` | `/api/auth/register` | 가입. **첫 계정은 ADMIN** (공개) |
+| `POST` | `/api/auth/login` | 로그인 → 토큰 (공개) |
+| `GET` | `/api/auth/me` | 내 정보 |
+| `POST` | `/api/auth/password` | 비밀번호 변경 |
+| `GET` | `/api/auth/orphans` | 주인 없는 데이터 건수 |
+| `POST` | `/api/auth/orphans/claim` | **주인 없는 데이터를 내 계정으로 귀속** (ADMIN 전용) |
 
 칸반:
 

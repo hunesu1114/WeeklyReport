@@ -21,7 +21,13 @@ public class Project {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 100, unique = true)
+    /** 이 보드의 주인. 비어 있으면 아직 아무에게도 귀속되지 않은 것이다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    private AppUser owner;
+
+    // 유일 제약은 (owner_id, lower(name)) 이다. 사람이 다르면 같은 이름을 쓸 수 있다.
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
     @Column(name = "description", length = 500)

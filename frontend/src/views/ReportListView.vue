@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
+import OrphanClaimBanner from '@/components/OrphanClaimBanner.vue'
 import { reportApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { formatExcelDate, weekdayOf } from '@/utils/report'
@@ -72,6 +73,8 @@ async function remove(report) {
 
 <template>
   <div class="list">
+    <OrphanClaimBanner @claimed="load(0)" />
+
     <div class="list__head">
       <div>
         <h1>보고서 목록</h1>
@@ -244,7 +247,7 @@ async function remove(report) {
 }
 
 .table tbody tr:hover {
-  background: #fafbfc;
+  background: var(--surface-hover);
 }
 
 .table__title {
