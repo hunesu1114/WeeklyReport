@@ -66,7 +66,7 @@ function applyDefaults() {
 
       <div class="field meta__date">
         <label for="report-date">보고일</label>
-        <input id="report-date" v-model="form.reportDate" class="control" type="date" />
+        <input id="report-date" v-model="form.reportDate" class="control" v-date-picker type="date" />
         <span class="tiny muted">{{ weekdayOf(form.reportDate) }}요일</span>
       </div>
 
@@ -102,9 +102,9 @@ function applyDefaults() {
             <span class="badge">{{ thisWeekDays }}일</span>
           </div>
           <div class="range__inputs">
-            <input v-model="form.thisWeekStart" class="control" type="date" />
+            <input v-model="form.thisWeekStart" class="control" v-date-picker type="date" />
             <span class="range__tilde">~</span>
-            <input v-model="form.thisWeekEnd" class="control" type="date" />
+            <input v-model="form.thisWeekEnd" class="control" v-date-picker type="date" />
           </div>
         </div>
 
@@ -114,9 +114,9 @@ function applyDefaults() {
             <span class="badge">{{ nextWeekDays }}일</span>
           </div>
           <div class="range__inputs">
-            <input v-model="form.nextWeekStart" class="control" type="date" />
+            <input v-model="form.nextWeekStart" class="control" v-date-picker type="date" />
             <span class="range__tilde">~</span>
-            <input v-model="form.nextWeekEnd" class="control" type="date" />
+            <input v-model="form.nextWeekEnd" class="control" v-date-picker type="date" />
           </div>
         </div>
 

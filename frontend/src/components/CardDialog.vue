@@ -105,13 +105,13 @@ function submit() {
       <div class="cardform__row">
         <div class="field">
           <label for="card-start">생성일 <span class="muted">(시작일)</span></label>
-          <input id="card-start" v-model="form.startDate" class="control" type="date" />
+          <input id="card-start" v-model="form.startDate" class="control" v-date-picker type="date" />
           <span class="tiny muted">주간보고의 금주 기간에 이 날짜가 들어가면 목록에 잡힙니다.</span>
         </div>
 
         <div class="field">
           <label for="card-due">완료일</label>
-          <input id="card-due" v-model="form.dueDate" class="control" type="date" />
+          <input id="card-due" v-model="form.dueDate" class="control" v-date-picker type="date" />
           <span
             v-if="remaining !== null"
             class="tiny"

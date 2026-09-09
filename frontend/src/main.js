@@ -5,6 +5,7 @@ import router from './router'
 import { initTheme } from './composables/useTheme'
 import { setUnauthorizedHandler } from './api/client'
 import { useAuthStore } from './stores/auth'
+import { datePicker } from './directives/datePicker'
 import './assets/main.css'
 
 // 첫 페인트 전에 테마를 적용해야 라이트 화면이 번쩍이지 않는다.
@@ -28,5 +29,8 @@ setUnauthorizedHandler(() => {
   // replace 로 히스토리를 쌓지 않고, 중복 이동 거부는 조용히 넘긴다.
   router.replace({ name: 'login', query: { redirect: current.fullPath } }).catch(() => {})
 })
+
+// 날짜 입력은 칸 아무 데나 눌러도 달력이 열려야 한다
+app.directive('date-picker', datePicker)
 
 app.use(router).mount('#app')

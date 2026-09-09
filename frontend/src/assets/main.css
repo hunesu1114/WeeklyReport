@@ -258,6 +258,11 @@ textarea.control {
   line-height: 1.6;
 }
 
+/* 칸 아무 데나 누르면 달력이 열린다(v-date-picker). 눌러도 되는 곳임을 커서로 알린다. */
+input[type='date'].control {
+  cursor: pointer;
+}
+
 /* 브라우저 기본 날짜 아이콘이 다크에서 검게 보이는 것을 막는다 */
 :root[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
 :root[data-theme='dark'] input[type='number']::-webkit-inner-spin-button {
