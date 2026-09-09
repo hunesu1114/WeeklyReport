@@ -225,8 +225,8 @@ async function remove(report) {
 .table th {
   padding: 11px 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--sky-050);
-  color: var(--ink-3);
+  background: var(--bg-subtle);
+  color: var(--text-3);
   font-size: 12px;
   font-weight: 700;
   text-align: left;

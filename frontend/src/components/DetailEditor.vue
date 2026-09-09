@@ -207,7 +207,7 @@ function onKeydown(event) {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
-  color: var(--ink-3);
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.5;
@@ -215,9 +215,9 @@ function onKeydown(event) {
 }
 
 .chip:hover {
-  background: var(--navy-050);
-  border-color: var(--sky);
-  color: var(--navy-600);
+  background: var(--brand-soft);
+  border-color: var(--brand-border);
+  color: var(--brand-strong);
 }
 
 .detail-editor__area {

@@ -5,6 +5,7 @@ import ItemSection from '@/components/ItemSection.vue'
 import ReportMetaCard from '@/components/ReportMetaCard.vue'
 import ReportPreview from '@/components/ReportPreview.vue'
 import DetailEditor from '@/components/DetailEditor.vue'
+import KanbanLinkPanel from '@/components/KanbanLinkPanel.vue'
 import { reportApi } from '@/api/client'
 import { useMetaStore } from '@/stores/meta'
 import { useToast } from '@/composables/useToast'
@@ -252,6 +253,25 @@ async function removeReport() {
   }
 }
 
+/**
+ * 칸반 카드를 금주 진행 항목으로 옮긴다.
+ *
+ * 보고서의 '업무명'은 프로젝트 단위라, 같은 프로젝트 이름의 항목이 이미 있으면
+ * 새 항목을 만들지 않고 그 항목의 업무상세에 줄만 덧붙인다.
+ */
+function addFromKanban({ taskName, lines }) {
+  let item = thisWeekItems.value.find((it) => (it.taskName || '').trim() === taskName.trim())
+  if (!item) {
+    item = newItem(THIS_WEEK)
+    item.taskName = taskName
+    item.detail = ''
+    thisWeekItems.value.push(item)
+  }
+  const head = item.detail ? `${item.detail.replace(/\s+$/, '')}\n` : ''
+  item.detail = head + lines.join('\n')
+  toast.success(`'${taskName}' 항목에 ${lines.length}줄을 넣었습니다.`)
+}
+
 function onGlobalKeydown(event) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     event.preventDefault()
@@ -349,6 +369,13 @@ function onGlobalKeydown(event) {
             :next-week-items="nextWeekItems"
           />
         </div>
+
+        <KanbanLinkPanel
+          :from="form.thisWeekStart"
+          :to="form.thisWeekEnd"
+          :used-task-names="thisWeekItems.map((it) => it.taskName)"
+          @add="addFromKanban"
+        />
       </aside>
     </div>
 
@@ -436,13 +463,18 @@ function onGlobalKeydown(event) {
 .editor__preview {
   position: sticky;
   top: 118px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
 }
 
 .editor__preview-card {
   overflow: hidden;
-  max-height: calc(100vh - 200px);
   display: flex;
   flex-direction: column;
+  flex: none;
 }
 
 .editor__preview-card :deep(.preview) {
@@ -475,7 +507,7 @@ function onGlobalKeydown(event) {
 
 .summary__label {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--text-3);
 }
 
 .summary__cell strong {

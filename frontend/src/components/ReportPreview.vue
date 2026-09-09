@@ -174,7 +174,7 @@ const excluded = computed(() => roundHours((Number(props.form.baseHours) || 0) -
 
 .cell--empty {
   text-align: center;
-  color: var(--ink-4);
+  color: var(--text-4);
   padding: 14px;
 }
 

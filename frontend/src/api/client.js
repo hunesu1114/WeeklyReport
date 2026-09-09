@@ -40,6 +40,30 @@ export const reportApi = {
   },
 }
 
+export const kanbanApi = {
+  projects: (activeOnly = false) =>
+    http.get('/kanban/projects', { params: { activeOnly } }).then((r) => r.data),
+  createProject: (payload) => http.post('/kanban/projects', payload).then((r) => r.data),
+  updateProject: (id, payload) => http.put(`/kanban/projects/${id}`, payload).then((r) => r.data),
+  removeProject: (id) => http.delete(`/kanban/projects/${id}`),
+
+  board: (projectId) => http.get(`/kanban/projects/${projectId}/board`).then((r) => r.data),
+
+  createCard: (payload) => http.post('/kanban/cards', payload).then((r) => r.data),
+  updateCard: (id, payload) => http.put(`/kanban/cards/${id}`, payload).then((r) => r.data),
+  moveCard: (id, payload) => http.put(`/kanban/cards/${id}/move`, payload).then((r) => r.data),
+  removeCard: (id) => http.delete(`/kanban/cards/${id}`),
+
+  /** 완료일이 임박한 카드 (기본 3일) */
+  dueSoon: (days) => http.get('/kanban/cards/due-soon', { params: { days } }).then((r) => r.data),
+
+  /** 시작일이 기간 안에 있는 카드 — 주간보고 연동 */
+  startedBetween: (from, to, projectId) =>
+    http
+      .get('/kanban/cards/started-between', { params: { from, to, projectId } })
+      .then((r) => r.data),
+}
+
 export const metaApi = {
   templates: () => http.get('/meta/templates').then((r) => r.data),
   statuses: () => http.get('/meta/statuses').then((r) => r.data),

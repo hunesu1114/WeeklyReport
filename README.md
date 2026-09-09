@@ -1,6 +1,7 @@
 # 주간보고 작성 웹앱
 
 기존에 손으로 만들던 주간보고 엑셀을, 웹에서 편하게 입력하고 **같은 모양의 xlsx 로 내려받는** 서비스입니다.
+칸반 보드로 주중에 일을 관리하고, 그 카드를 그대로 주간보고에 옮겨 담을 수 있습니다.
 
 Spring Boot 3.4 (Java 21) · Vue 3 · PostgreSQL 16 · Docker Compose · Apache POI
 
@@ -55,6 +56,34 @@ docker compose down -v       # DB 데이터까지
 
 작성자 · 업무명 · 업무상세 전문 검색, 다음 주 보고서 만들기, 엑셀 다운로드, 삭제.
 
+### 칸반 보드
+
+- **프로젝트마다 보드 하나** — 상단 탭으로 오갑니다. 색을 지정하면 카드와 목록에서 함께 보입니다.
+- **BACKLOG · TODO · ING · DONE** 네 칸. 카드를 끌어서 칸을 옮기고 같은 칸 안에서 순서도 바꿉니다.
+  놓일 자리는 초록 선으로 미리 보여줍니다.
+- **카드 한 장** — 제목, 내용, 중요도(낮음/보통/높음/긴급), 생성일, 완료일.
+  중요도는 카드 왼쪽 색 띠로 나타나 목록을 훑을 때 바로 걸러집니다.
+- **완료일 임박 알림** — 완료일이 **3일 이내**로 남은 카드를 헤더 종 아이콘에 모읍니다.
+  이미 지난 카드도 함께 보여줍니다. 놓친 일이 조용히 사라지면 알림의 의미가 없기 때문입니다.
+  완료(DONE)된 카드는 제외됩니다.
+
+### 칸반 → 주간보고 연동
+
+보고서 작성 화면의 **엑셀 미리보기 아래**에 `칸반 연동` 패널이 있습니다.
+보고서의 **금주 기간 안에 생성일(시작일)이 들어가는** 카드를 프로젝트별로 모아 보여줍니다.
+
+- `넣기` — 카드 한 장을 금주 진행 항목으로
+- `전부 넣기` — 그 프로젝트의 카드를 한 번에
+
+보고서의 *업무명*은 프로젝트 단위라, 같은 이름의 항목이 이미 있으면 새로 만들지 않고
+그 항목의 업무상세에 줄만 덧붙입니다. 카드 상태는 `[진행] / [완료] / [예정]` 태그로,
+내용은 하위 불릿으로 변환됩니다.
+
+### 화면
+
+- **라이트 / 다크 모드** — 헤더 오른쪽 버튼으로 전환합니다. 고르기 전에는 OS 설정을 따릅니다.
+- 키컬러는 긍정(저장·완료·진행)에 green, 부정(삭제·지연·초과)에 red 를 씁니다.
+
 ---
 
 ## 개발 모드
@@ -95,6 +124,18 @@ cd backend && mvn test
 | `POST` | `/api/reports/{id}/follow-up` | 차주 예정을 금주로 옮긴 다음 주 보고서 생성 |
 | `GET` | `/api/reports/{id}/export?templateKey=` | **xlsx 다운로드** |
 | `GET` | `/api/meta/templates` `\|` `/statuses` `\|` `/task-names` `\|` `/authors` | 화면 보조 데이터 |
+
+칸반:
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| `GET` | `/api/kanban/projects?activeOnly=` | 프로젝트 목록 (카드 수 · 임박 수 포함) |
+| `POST` `\|` `PUT` `\|` `DELETE` | `/api/kanban/projects[/{id}]` | 프로젝트 생성 · 수정 · 삭제 |
+| `GET` | `/api/kanban/projects/{id}/board` | 보드 한 판 (칸별 카드) |
+| `POST` `\|` `PUT` `\|` `DELETE` | `/api/kanban/cards[/{id}]` | 카드 생성 · 수정 · 삭제 |
+| `PUT` | `/api/kanban/cards/{id}/move` | 칸 이동 · 순서 변경 |
+| `GET` | `/api/kanban/cards/due-soon?days=3` | 완료일 임박 카드 |
+| `GET` | `/api/kanban/cards/started-between?from=&to=&projectId=` | 기간 안에 시작한 카드 (보고서 연동) |
 
 다운로드 파일명은 `주간보고(김현수)_20260515.xlsx` 형식이며,
 `Content-Disposition` 에 RFC 5987 로 인코딩되어 내려갑니다.
@@ -147,24 +188,29 @@ cd backend && mvn test
 │  ├─ Dockerfile
 │  └─ src/main/
 │     ├─ java/com/khs/weeklyreport/
-│     │  ├─ domain/           # Report, ReportItem, ReportSection, ReportTemplate
+│     │  ├─ domain/           # Report, ReportItem, ReportTemplate,
+│     │  │                    # Project, KanbanCard, KanbanStatus, CardPriority
 │     │  ├─ repository/
-│     │  ├─ service/          # ReportService, ReportExportService, WeekCalculator
+│     │  ├─ service/          # ReportService, ReportExportService,
+│     │  │                    # WeekCalculator, KanbanService
 │     │  ├─ excel/            # ReportRenderer(SPI), RendererRegistry,
 │     │  │                    # DefaultV1ReportRenderer, ExcelStyleKit, RowHeightEstimator
 │     │  └─ web/              # 컨트롤러 + DTO + 예외 처리
 │     └─ resources/
 │        ├─ application.yml
-│        └─ db/migration/     # Flyway V1(스키마) · V2(양식 카탈로그 seed)
+│        └─ db/migration/     # Flyway V1(스키마) · V2(양식 seed) · V3(칸반)
 └─ frontend/
    ├─ Dockerfile, nginx.conf
    └─ src/
-      ├─ views/               # ReportListView, ReportEditorView
-      ├─ components/          # ReportMetaCard, ItemSection, ItemEditor,
-      │                       # DetailEditor, ReportPreview
+      ├─ views/               # ReportListView, ReportEditorView, KanbanView
+      ├─ components/          # ReportMetaCard, ItemSection, ItemEditor, DetailEditor,
+      │                       # ReportPreview, KanbanLinkPanel, KanbanColumn,
+      │                       # KanbanCardItem, CardDialog, ProjectDialog,
+      │                       # DueSoonBell, BaseModal
+      ├─ composables/         # useToast, useTheme (라이트/다크)
       ├─ api/client.js
-      ├─ stores/meta.js
-      └─ utils/report.js
+      ├─ stores/              # meta, kanban
+      └─ utils/               # report, kanban
 ```
 
 ---

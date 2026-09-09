@@ -165,7 +165,7 @@ function applyDefaults() {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--sky-050);
+  background: var(--bg-subtle);
 }
 
 .range {
@@ -180,7 +180,7 @@ function applyDefaults() {
   gap: 6px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--ink-2);
+  color: var(--text-2);
 }
 
 .range__inputs {
@@ -194,7 +194,7 @@ function applyDefaults() {
 }
 
 .range__tilde {
-  color: var(--ink-4);
+  color: var(--text-4);
 }
 
 .meta__reset {
@@ -209,7 +209,7 @@ function applyDefaults() {
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--text-3);
 }
 
 .meta__advanced .field {

@@ -122,14 +122,14 @@ function onDrop() {
 .section__add {
   align-self: flex-start;
   border-style: dashed;
-  color: var(--navy-600);
+  color: var(--brand-strong);
 }
 
 .linklike {
   border: 0;
   background: none;
   padding: 0;
-  color: var(--navy-600);
+  color: var(--brand-strong);
   font-weight: 700;
   text-decoration: underline;
 }

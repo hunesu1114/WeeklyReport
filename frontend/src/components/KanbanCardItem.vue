@@ -1,0 +1,173 @@
+<script setup>
+import { computed } from 'vue'
+import { PRIORITY_META, dueLabel, dueTone } from '@/utils/kanban'
+
+const props = defineProps({
+  card: { type: Object, required: true },
+  dragging: { type: Boolean, default: false },
+  /** 여러 프로젝트를 섞어 보여줄 때만 프로젝트 이름을 띄운다 */
+  showProject: { type: Boolean, default: false },
+})
+const emit = defineEmits(['open', 'dragstart', 'dragend'])
+
+const priority = computed(() => PRIORITY_META[props.card.priority] ?? PRIORITY_META.NORMAL)
+const priorityBadge = computed(() =>
+  priority.value.tone === 'neutral' ? 'badge' : `badge badge--${priority.value.tone}`,
+)
+const due = computed(() => dueLabel(props.card.daysUntilDue))
+const tone = computed(() => dueTone(props.card.daysUntilDue))
+const done = computed(() => props.card.status === 'DONE')
+
+function onDragStart(event) {
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', String(props.card.id))
+  emit('dragstart', props.card)
+}
+</script>
+
+<template>
+  <article
+    class="kcard"
+    :class="[`kcard--${priority.tone}`, { 'kcard--dragging': dragging, 'kcard--done': done }]"
+    draggable="true"
+    tabindex="0"
+    role="button"
+    @dragstart="onDragStart"
+    @dragend="emit('dragend')"
+    @click="emit('open', card)"
+    @keydown.enter.prevent="emit('open', card)"
+    @keydown.space.prevent="emit('open', card)"
+  >
+    <div class="kcard__top">
+      <span :class="priorityBadge">{{ priority.label }}</span>
+      <span v-if="showProject" class="kcard__project tiny muted">{{ card.projectName }}</span>
+    </div>
+
+    <h4 class="kcard__title">{{ card.title }}</h4>
+    <p v-if="card.content" class="kcard__content">{{ card.content }}</p>
+
+    <div class="kcard__meta">
+      <span v-if="card.startDate" class="tiny muted" title="생성일(시작일)">▶ {{ card.startDate }}</span>
+      <span
+        v-if="card.dueDate"
+        class="kcard__due tiny"
+        :class="`kcard__due--${done ? 'neutral' : tone}`"
+        :title="`완료일 ${card.dueDate}`"
+      >
+        ■ {{ done ? card.dueDate : due }}
+      </span>
+    </div>
+  </article>
+</template>
+
+<style scoped>
+.kcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 12px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  cursor: grab;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.08s, opacity 0.12s;
+}
+
+.kcard:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+
+.kcard:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.kcard--dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+/* 중요도를 왼쪽 띠로 표시한다. 목록을 훑을 때 색만 보고 걸러진다. */
+.kcard--neutral {
+  border-left-color: var(--line-strong);
+}
+.kcard--info {
+  border-left-color: var(--info);
+}
+.kcard--warn {
+  border-left-color: var(--warn);
+}
+.kcard--danger {
+  border-left-color: var(--danger);
+}
+
+.kcard--done .kcard__title {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-4);
+}
+
+.kcard__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kcard__project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kcard__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.kcard__content {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+  /* 카드가 길어지면 보드가 흐트러진다. 세 줄까지만 보여주고 자른다 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kcard__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.kcard__due {
+  font-weight: 700;
+}
+
+.kcard__due--neutral {
+  color: var(--text-3);
+}
+.kcard__due--warn {
+  color: var(--warn);
+}
+.kcard__due--danger {
+  color: var(--danger);
+}
+</style>

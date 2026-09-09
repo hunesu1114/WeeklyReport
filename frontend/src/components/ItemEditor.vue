@@ -139,7 +139,7 @@ const detailPlaceholder = computed(() =>
 .item--dragging {
   opacity: 0.42;
   border-style: dashed;
-  border-color: var(--navy-600);
+  border-color: var(--brand-strong);
 }
 
 .item__bar {
@@ -163,7 +163,7 @@ const detailPlaceholder = computed(() =>
 
 .item__handle {
   padding-bottom: 9px;
-  color: var(--ink-4);
+  color: var(--text-4);
   cursor: grab;
   letter-spacing: -2px;
   user-select: none;
@@ -176,8 +176,8 @@ const detailPlaceholder = computed(() =>
   height: 26px;
   margin-bottom: 5px;
   border-radius: 7px;
-  background: var(--navy-050);
-  color: var(--navy);
+  background: var(--brand-soft);
+  color: var(--brand);
   font-size: 12px;
   font-weight: 800;
 }
@@ -199,7 +199,7 @@ const detailPlaceholder = computed(() =>
   margin-bottom: 5px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--text-3);
 }
 
 </style>

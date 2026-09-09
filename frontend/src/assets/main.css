@@ -1,34 +1,166 @@
+/* ===========================================================================
+   디자인 토큰
+   ---------------------------------------------------------------------------
+   긍정(진행/완료/저장)은 green, 부정(삭제/초과/지연)은 red 를 키컬러로 쓴다.
+   나머지는 중립 회색으로 두어 두 색이 눈에 띄게 한다.
+
+   라이트가 기본이고, 다크는 두 군데서 켜진다.
+     1) 사용자가 직접 고른 경우  -> html[data-theme="dark"]
+     2) 고르지 않았고 OS 가 다크 -> @media (prefers-color-scheme: dark)
+   색은 반드시 :root 에 한 번 정의하고 다크에서 값만 덮어쓴다.
+   다크 블록에서만 정의된 색이 있으면 라이트에서 사라진다.
+   =========================================================================== */
+
 :root {
-  /* 엑셀 양식의 색을 그대로 UI 팔레트로 쓴다 */
-  --navy: #1f3864;
-  --navy-600: #2f5597;
-  --navy-050: #eef2f9;
-  --sky: #bdd7ee;
-  --sky-050: #f2f8fd;
+  color-scheme: light;
 
-  --ink: #14181f;
-  --ink-2: #414a58;
-  --ink-3: #6b7684;
-  --ink-4: #99a1ac;
-
-  --bg: #f4f6f9;
+  /* 표면 */
+  --bg: #f6f7f9;
+  --bg-subtle: #eef1f5;
   --surface: #ffffff;
-  --line: #dfe3e9;
-  --line-strong: #c6ccd5;
+  --surface-2: #fafbfc;
+  --surface-hover: #f2f4f7;
 
-  --ok: #17803d;
+  /* 글자 */
+  --text: #14171c;
+  --text-2: #3f4652;
+  --text-3: #6b7280;
+  --text-4: #9aa2ae;
+
+  /* 선 */
+  --line: #e3e7ec;
+  --line-strong: #cbd2db;
+
+  /* 키컬러 — 긍정 */
+  --brand: #16a34a;
+  --brand-strong: #15803d;
+  --brand-bright: #22c55e;
+  --brand-soft: #e8f7ee;
+  --brand-border: #a7e3bf;
+  --on-brand: #ffffff;
+
+  /* 키컬러 — 부정 */
+  --danger: #dc2626;
+  --danger-bright: #ef4444;
+  --danger-soft: #fdecec;
+  --danger-border: #f3b6b6;
+
+  /* 보조 */
   --warn: #b45309;
-  --danger: #c0392b;
-  --danger-bg: #fdf1f0;
+  --warn-soft: #fdf3e3;
+  --warn-border: #f0d19a;
+  --info: #2563eb;
+  --info-soft: #eaf0fe;
+  --info-border: #b9cdfa;
+  --violet: #7c3aed;
+  --violet-soft: #f2ecfe;
 
-  --radius: 10px;
-  --radius-sm: 6px;
-  --shadow-1: 0 1px 2px rgba(20, 24, 31, 0.06), 0 1px 3px rgba(20, 24, 31, 0.04);
-  --shadow-2: 0 4px 16px rgba(20, 24, 31, 0.08);
+  /* 형태 */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --shadow-1: 0 1px 2px rgba(16, 20, 27, 0.05), 0 1px 3px rgba(16, 20, 27, 0.04);
+  --shadow-2: 0 6px 20px rgba(16, 20, 27, 0.09);
+  --shadow-3: 0 18px 50px rgba(16, 20, 27, 0.18);
+  --ring: 0 0 0 3px rgba(34, 197, 94, 0.22);
 
   --font: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', '맑은 고딕',
     'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
   --font-mono: 'D2Coding', 'Consolas', 'Menlo', 'Malgun Gothic', monospace;
+
+  --header-h: 58px;
+}
+
+/* OS 가 다크이고 사용자가 라이트를 고르지 않았을 때 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg: #0e1014;
+    --bg-subtle: #15181e;
+    --surface: #171a21;
+    --surface-2: #1c2028;
+    --surface-hover: #212630;
+
+    --text: #e7eaef;
+    --text-2: #b6bdc9;
+    --text-3: #8b94a3;
+    --text-4: #69717f;
+
+    --line: #262b34;
+    --line-strong: #39404c;
+
+    --brand: #34d17f;
+    --brand-strong: #4ade80;
+    --brand-bright: #4ade80;
+    --brand-soft: #10291c;
+    --brand-border: #1f5a3a;
+    --on-brand: #06210f;
+
+    --danger: #f87171;
+    --danger-bright: #f87171;
+    --danger-soft: #2c1416;
+    --danger-border: #6b2b2b;
+
+    --warn: #fbbf24;
+    --warn-soft: #2a2010;
+    --warn-border: #6a5220;
+    --info: #7ea6ff;
+    --info-soft: #131c30;
+    --info-border: #2c4372;
+    --violet: #b191f7;
+    --violet-soft: #1e1730;
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.5);
+    --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.6);
+    --ring: 0 0 0 3px rgba(74, 222, 128, 0.25);
+  }
+}
+
+/* 사용자가 직접 다크를 고른 경우 (OS 설정을 이긴다) */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0e1014;
+  --bg-subtle: #15181e;
+  --surface: #171a21;
+  --surface-2: #1c2028;
+  --surface-hover: #212630;
+
+  --text: #e7eaef;
+  --text-2: #b6bdc9;
+  --text-3: #8b94a3;
+  --text-4: #69717f;
+
+  --line: #262b34;
+  --line-strong: #39404c;
+
+  --brand: #34d17f;
+  --brand-strong: #4ade80;
+  --brand-bright: #4ade80;
+  --brand-soft: #10291c;
+  --brand-border: #1f5a3a;
+  --on-brand: #06210f;
+
+  --danger: #f87171;
+  --danger-bright: #f87171;
+  --danger-soft: #2c1416;
+  --danger-border: #6b2b2b;
+
+  --warn: #fbbf24;
+  --warn-soft: #2a2010;
+  --warn-border: #6a5220;
+  --info: #7ea6ff;
+  --info-soft: #131c30;
+  --info-border: #2c4372;
+  --violet: #b191f7;
+  --violet-soft: #1e1730;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --ring: 0 0 0 3px rgba(74, 222, 128, 0.25);
 }
 
 * {
@@ -43,11 +175,17 @@ body {
 
 body {
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   font-family: var(--font);
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+/* 테마를 바꾸는 순간 전체가 한 번에 바뀌도록. 전환 중 개별 애니메이션은 끈다. */
+.theme-switching * {
+  transition: none !important;
 }
 
 button {
@@ -65,10 +203,15 @@ textarea {
 }
 
 a {
-  color: var(--navy-600);
+  color: var(--brand-strong);
 }
 
-/* ---------- 폼 컨트롤 ---------- */
+::selection {
+  background: var(--brand-soft);
+  color: var(--text);
+}
+
+/* ---------- 폼 ---------- */
 .field {
   display: flex;
   flex-direction: column;
@@ -76,41 +219,56 @@ a {
   min-width: 0;
 }
 
-.field > label {
+.field > label,
+.field-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--text-3);
   letter-spacing: -0.01em;
 }
 
 .control {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 11px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  transition: border-color 0.12s, box-shadow 0.12s;
+  color: var(--text);
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
 }
 
 .control:hover:not(:disabled) {
-  border-color: var(--ink-4);
+  border-color: var(--text-4);
 }
 
 .control:focus {
   outline: none;
-  border-color: var(--navy-600);
-  box-shadow: 0 0 0 3px rgba(47, 85, 151, 0.14);
+  border-color: var(--brand);
+  box-shadow: var(--ring);
 }
 
 .control:disabled {
-  background: #f7f8fa;
-  color: var(--ink-4);
+  background: var(--bg-subtle);
+  color: var(--text-4);
   cursor: not-allowed;
 }
 
 textarea.control {
   resize: vertical;
   line-height: 1.6;
+}
+
+/* 브라우저 기본 날짜 아이콘이 다크에서 검게 보이는 것을 막는다 */
+:root[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
+:root[data-theme='dark'] input[type='number']::-webkit-inner-spin-button {
+  filter: invert(1) opacity(0.65);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) input[type='date']::-webkit-calendar-picker-indicator,
+  :root:not([data-theme='light']) input[type='number']::-webkit-inner-spin-button {
+    filter: invert(1) opacity(0.65);
+  }
 }
 
 /* ---------- 버튼 ---------- */
@@ -123,62 +281,72 @@ textarea.control {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  color: var(--ink-2);
+  color: var(--text-2);
   font-weight: 600;
   white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s;
 }
 
 .btn:hover:not(:disabled) {
-  background: #f7f8fa;
-  border-color: var(--ink-4);
+  background: var(--surface-hover);
+  border-color: var(--text-4);
+  color: var(--text);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
+/* 긍정 동작 — 저장, 생성, 다운로드 */
 .btn--primary {
-  background: var(--navy);
-  border-color: var(--navy);
-  color: #fff;
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--navy-600);
-  border-color: var(--navy-600);
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+  color: var(--on-brand);
 }
 
 .btn--ghost {
   border-color: transparent;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--text-3);
 }
 
 .btn--ghost:hover:not(:disabled) {
-  background: #eef0f4;
+  background: var(--surface-hover);
   border-color: transparent;
 }
 
+/* 부정 동작 — 삭제, 버리기 */
 .btn--danger {
   color: var(--danger);
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: var(--danger-bg);
-  border-color: #e8b4ae;
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
 }
 
 .btn--sm {
-  padding: 5px 9px;
+  padding: 5px 10px;
   font-size: 12px;
 }
 
 .btn--icon {
-  padding: 5px;
-  width: 28px;
-  height: 28px;
+  padding: 0;
+  width: 30px;
+  height: 30px;
 }
 
 /* ---------- 카드 ---------- */
@@ -209,44 +377,57 @@ textarea.control {
   padding: 16px;
 }
 
+/* ---------- 배지 ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge--ok {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.badge--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.badge--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.badge--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
 /* ---------- 기타 ---------- */
 .muted {
-  color: var(--ink-3);
+  color: var(--text-3);
 }
 
 .tiny {
   font-size: 12px;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--navy-050);
-  color: var(--navy-600);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.badge--warn {
-  background: #fef3e2;
-  color: var(--warn);
-}
-
-.badge--ok {
-  background: #e8f6ed;
-  color: var(--ok);
-}
-
 .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+  opacity: 0.7;
 }
 
 @keyframes spin {
@@ -262,4 +443,31 @@ textarea.control {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* 스크롤바도 테마를 따라가게 */
+* {
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-4);
+  background-clip: content-box;
 }
