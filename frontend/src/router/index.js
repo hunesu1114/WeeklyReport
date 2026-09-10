@@ -5,18 +5,38 @@ import KanbanView from '@/views/KanbanView.vue'
 import LoginView from '@/views/LoginView.vue'
 import { useAuthStore } from '@/stores/auth'
 
+/** 브라우저 탭에 항상 붙는 앱 이름. */
+export const APP_NAME = '주간보고/칸반'
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+    { path: '/login', name: 'login', component: LoginView, meta: { public: true, title: '로그인' } },
 
-    { path: '/', name: 'reports', component: ReportListView },
-    { path: '/reports/new', name: 'report-new', component: ReportEditorView },
-    { path: '/reports/:id', name: 'report-edit', component: ReportEditorView, props: true },
+    { path: '/', name: 'reports', component: ReportListView, meta: { title: '보고서 목록' } },
+    {
+      path: '/reports/new',
+      name: 'report-new',
+      component: ReportEditorView,
+      meta: { title: '새 주간보고' },
+    },
+    {
+      path: '/reports/:id',
+      name: 'report-edit',
+      component: ReportEditorView,
+      props: true,
+      meta: { title: '주간보고 수정' },
+    },
 
     // 프로젝트를 안 고르고 들어오면 화면이 마지막으로 보던 보드로 옮겨준다
-    { path: '/kanban', name: 'kanban', component: KanbanView },
-    { path: '/kanban/:projectId', name: 'kanban-board', component: KanbanView, props: true },
+    { path: '/kanban', name: 'kanban', component: KanbanView, meta: { title: '칸반 보드' } },
+    {
+      path: '/kanban/:projectId',
+      name: 'kanban-board',
+      component: KanbanView,
+      props: true,
+      meta: { title: '칸반 보드' },
+    },
   ],
 })
 
@@ -35,6 +55,11 @@ router.beforeEach((to) => {
     return { name: 'login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
   }
   return true
+})
+
+// 탭 제목에도 앱 이름이 남아 있어야 여러 탭 중에서 찾을 수 있다
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} · ${APP_NAME}` : APP_NAME
 })
 
 export default router

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import BrandMark from '@/components/BrandMark.vue'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -67,10 +68,10 @@ async function submit() {
   <div class="login">
     <div class="login__card card">
       <div class="login__brand">
-        <span class="login__mark" aria-hidden="true">W</span>
+        <BrandMark :size="40" />
         <div>
           <h1>{{ title }}</h1>
-          <p class="tiny muted">주간보고 &amp; 칸반</p>
+          <p class="tiny muted">주간보고/칸반</p>
         </div>
       </div>
 
@@ -159,18 +160,6 @@ async function submit() {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-}
-
-.login__mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--brand);
-  color: var(--on-brand);
-  font-weight: 800;
-  font-size: 19px;
 }
 
 .login__brand h1 {

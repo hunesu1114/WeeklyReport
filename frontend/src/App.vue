@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import BrandMark from '@/components/BrandMark.vue'
 import DueSoonBell from '@/components/DueSoonBell.vue'
 import { useToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
@@ -46,10 +47,10 @@ function logout() {
 <template>
   <div class="shell">
     <header v-if="showChrome" class="topbar">
-      <RouterLink to="/" class="brand">
-        <span class="brand__mark" aria-hidden="true">W</span>
+      <RouterLink to="/" class="brand" title="주간보고/칸반">
+        <BrandMark :size="30" />
         <span class="brand__text">
-          <strong>주간보고</strong>
+          <strong>주간보고/칸반</strong>
           <em>Weekly Report &amp; Kanban</em>
         </span>
       </RouterLink>
@@ -142,18 +143,6 @@ function logout() {
   gap: 10px;
   color: var(--text);
   text-decoration: none;
-}
-
-.brand__mark {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--brand);
-  color: var(--on-brand);
-  font-weight: 800;
-  font-size: 15px;
 }
 
 .brand__text {

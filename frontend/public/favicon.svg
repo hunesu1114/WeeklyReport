@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="주간보고/칸반">
+  <!--
+    칸반 보드의 세 칸을 남은 일이 줄어드는 모습으로 단순화했다.
+    16px 파비콘에서도 뭉개지지 않도록 형태는 막대 세 개까지만 쓴다.
+  -->
+  <rect width="32" height="32" rx="7.5" fill="#16a34a"/>
+  <g fill="#ffffff">
+    <rect x="6.5" y="7.5" width="5" height="17" rx="1.6"/>
+    <rect x="13.5" y="7.5" width="5" height="12" rx="1.6" opacity="0.82"/>
+    <rect x="20.5" y="7.5" width="5" height="7" rx="1.6" opacity="0.62"/>
+  </g>
+</svg>
