@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { isExpired } from '@/utils/jwt'
 
 const http = axios.create({
   baseURL: '/api',
@@ -15,17 +16,40 @@ export function setAuthToken(token) {
   authToken = token || null
 }
 
-/** 토큰이 만료되면 화면이 로그인으로 돌아가야 한다. main.js 가 콜백을 심는다. */
+/** 세션이 끝났을 때 화면이 할 일. main.js 가 콜백을 심는다. */
 let onUnauthorized = null
 
 export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler
 }
 
+/**
+ * 토큰 없이 부르는 경로. 만료 검사와 자동 로그아웃에서 뺀다.
+ *
+ * '/auth/' 로 뭉뚱그리면 안 된다. /auth/me, /auth/orphans 처럼 로그인이
+ * 필요한 것까지 빠져서, 정작 세션이 끝났을 때 아무 안내도 못 하게 된다.
+ */
+const PUBLIC_PATHS = ['/auth/login', '/auth/register', '/auth/setup-state']
+
+function isPublicCall(url) {
+  return Boolean(url && PUBLIC_PATHS.some((path) => url.startsWith(path)))
+}
+
+export const SESSION_EXPIRED_MESSAGE = '로그인 세션이 만료되었습니다. 다시 로그인해 주세요.'
+
 http.interceptors.request.use((config) => {
-  if (authToken) {
-    config.headers.Authorization = `Bearer ${authToken}`
+  if (!authToken) return config
+
+  // 이미 지난 토큰이면 서버에 물어볼 것도 없다. 보내지 않고 바로 끊는다.
+  // 그래야 사용자가 버튼을 누른 즉시 안내가 뜬다.
+  if (!isPublicCall(config.url) && isExpired(authToken)) {
+    onUnauthorized?.()
+    const error = new Error(SESSION_EXPIRED_MESSAGE)
+    error.sessionExpired = true
+    return Promise.reject(error)
   }
+
+  config.headers.Authorization = `Bearer ${authToken}`
   return config
 })
 
@@ -33,12 +57,18 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   (error) => {
+    // 요청 인터셉터에서 이미 처리해 끊은 것. 그대로 올려보낸다.
+    if (error.sessionExpired) return Promise.reject(error)
+
     const status = error.response?.status
     const data = error.response?.data
 
-    // 토큰이 없거나 만료됐다. 로그인 시도 자체가 실패한 경우는 제외한다.
-    if (status === 401 && !error.config?.url?.includes('/auth/')) {
+    // 서버가 토큰을 거절했다. 로그인 시도 자체가 실패한 경우는 제외한다.
+    if (status === 401 && !isPublicCall(error.config?.url)) {
       onUnauthorized?.()
+      const expired = new Error(SESSION_EXPIRED_MESSAGE)
+      expired.sessionExpired = true
+      return Promise.reject(expired)
     }
 
     let message = data?.message || error.message || '알 수 없는 오류가 발생했습니다.'
