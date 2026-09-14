@@ -17,9 +17,25 @@ const mode = ref('login') // 'login' | 'register'
 const busy = ref(false)
 const error = ref('')
 
-const form = reactive({ username: '', password: '', displayName: '' })
+const form = reactive({ username: '', password: '', passwordConfirm: '', displayName: '' })
 
 const isRegister = computed(() => mode.value === 'register')
+
+/** 확인란을 치는 도중에는 조용하고, 다 치고 나서 다르면 그때 알려준다. */
+const mismatch = computed(
+  () =>
+    isRegister.value &&
+    form.passwordConfirm.length > 0 &&
+    form.password !== form.passwordConfirm,
+)
+
+/** 모드를 오갈 때 비밀번호는 남기지 않는다. */
+function switchMode(next) {
+  mode.value = next
+  error.value = ''
+  form.password = ''
+  form.passwordConfirm = ''
+}
 const title = computed(() => {
   if (!hasAnyUser.value) return '첫 계정 만들기'
   return isRegister.value ? '계정 만들기' : '로그인'
@@ -42,6 +58,10 @@ async function submit() {
   }
   if (isRegister.value && form.password.length < 8) {
     error.value = '비밀번호는 8자 이상이어야 합니다.'
+    return
+  }
+  if (isRegister.value && form.password !== form.passwordConfirm) {
+    error.value = '비밀번호가 서로 다릅니다.'
     return
   }
 
@@ -89,7 +109,6 @@ async function submit() {
             class="control"
             type="text"
             autocomplete="username"
-            placeholder="영문, 숫자, . _ -"
           />
         </div>
 
@@ -116,9 +135,29 @@ async function submit() {
           />
         </div>
 
+        <div v-if="isRegister" class="field">
+          <label for="login-password2">비밀번호 확인</label>
+          <input
+            id="login-password2"
+            v-model="form.passwordConfirm"
+            class="control"
+            :class="{ 'control--bad': mismatch }"
+            type="password"
+            autocomplete="new-password"
+            @keydown.enter="submit"
+          />
+          <span v-if="mismatch" class="tiny login__mismatch">비밀번호가 서로 다릅니다.</span>
+          <span
+            v-else-if="form.passwordConfirm && form.password === form.passwordConfirm"
+            class="tiny login__match"
+          >
+            비밀번호가 일치합니다.
+          </span>
+        </div>
+
         <p v-if="error" class="login__error tiny">{{ error }}</p>
 
-        <button class="btn btn--primary login__submit" type="submit" :disabled="busy">
+        <button class="btn btn--primary login__submit" type="submit" :disabled="busy || mismatch">
           <span v-if="busy" class="spinner"></span>
           {{ isRegister ? '계정 만들기' : '로그인' }}
         </button>
@@ -127,11 +166,11 @@ async function submit() {
       <p v-if="hasAnyUser" class="login__switch tiny muted">
         <template v-if="isRegister">
           이미 계정이 있나요?
-          <button class="linklike" type="button" @click="mode = 'login'; error = ''">로그인</button>
+          <button class="linklike" type="button" @click="switchMode('login')">로그인</button>
         </template>
         <template v-else>
           계정이 없나요?
-          <button class="linklike" type="button" @click="mode = 'register'; error = ''">
+          <button class="linklike" type="button" @click="switchMode('register')">
             계정 만들기
           </button>
         </template>
@@ -199,6 +238,16 @@ async function submit() {
   border-radius: var(--radius-xs);
   background: var(--danger-soft);
   color: var(--danger);
+  font-weight: 600;
+}
+
+.login__mismatch {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.login__match {
+  color: var(--brand-strong);
   font-weight: 600;
 }
 

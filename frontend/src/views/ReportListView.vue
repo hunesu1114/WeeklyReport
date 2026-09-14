@@ -203,6 +203,16 @@ async function remove(report) {
   gap: 8px;
 }
 
+/*
+ * 검색창·검색·새 주간보고의 높이를 맞춘다.
+ * input 은 브라우저 기본 line-height 를 써서 버튼과 몇 px 씩 어긋난다.
+ * 셋 다 같은 값을 못박는 편이 확실하다.
+ */
+.list__search .control,
+.list__search .btn {
+  height: 38px;
+}
+
 .list__search .control {
   width: 280px;
 }
