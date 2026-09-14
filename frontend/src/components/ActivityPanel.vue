@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { teamApi } from '@/api/client'
 import { activityText, activityTone, timeAgo } from '@/utils/team'
@@ -17,6 +17,7 @@ const last = ref(true)
 const loading = ref(false)
 const error = ref('')
 const collapsed = ref(true)
+const root = ref(null)
 
 /** 접혀 있는 동안에는 읽지 않는다. 보드를 옮길 때마다 쓸데없이 부르게 된다. */
 watch([tab, () => props.projectId], () => {
@@ -24,8 +25,19 @@ watch([tab, () => props.projectId], () => {
   else logs.value = []
 })
 
-watch(collapsed, (value) => {
-  if (!value) load(0)
+watch(collapsed, async (value) => {
+  if (value) return
+
+  // 기록이 다 들어온 뒤에 옮긴다. 불러오는 중일 때 옮기면 그때는 패널이
+  // 한 줄짜리라, 목록이 채워지는 순간 다시 화면 밖으로 밀려난다.
+  await load(0)
+  await nextTick()
+
+  // 펼쳤는데 화면 밖에 있으면 직접 내려가야 한다. 열었으면 보여주는 게 맞다.
+  root.value?.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'end',
+  })
 })
 
 async function load(next = 0) {
@@ -61,7 +73,7 @@ defineExpose({ reload })
 </script>
 
 <template>
-  <section class="card alog">
+  <section ref="root" class="card alog">
     <div class="card__head">
       <div>
         <h2 class="card__title">활동 기록</h2>
@@ -169,13 +181,35 @@ defineExpose({ reload })
   box-shadow: var(--shadow-1);
 }
 
+/*
+ * 340px 로 박아 두면 큰 화면에서도 열 줄 남짓만 보인다. 화면을 따라가게 해서
+ * 넓은 모니터에서는 한 번에 더 보이고, 작은 화면에서는 보드를 가리지 않게 한다.
+ */
 .alog__body {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px 14px;
-  max-height: 340px;
+  max-height: clamp(260px, 52vh, 680px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.alog__body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.alog__body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--line-strong);
+  background-clip: content-box;
+}
+
+.alog__body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .alog__state {

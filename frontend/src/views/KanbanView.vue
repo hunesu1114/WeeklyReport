@@ -737,7 +737,12 @@ async function onMembersChanged() {
   display: grid;
   grid-template-columns: repeat(4, minmax(240px, 1fr));
   gap: 12px;
-  align-items: start;
+  /*
+   * 네 칸의 높이를 맞춘다. 칸마다 제 길이를 가지면 보드 아래가 들쭉날쭉해
+   * 활동 기록이 어디서 시작하는지 매번 달라진다. 빈 칸이 넓어지는 것은
+   * 덤이 아니라 이득이다 — 카드를 떨어뜨릴 자리가 그만큼 넓어진다.
+   */
+  align-items: stretch;
 }
 
 @media (max-width: 1100px) {

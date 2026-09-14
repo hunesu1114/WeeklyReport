@@ -33,12 +33,29 @@ function indexFromPointer(event) {
   return nodes.length
 }
 
+/**
+ * 칸 위아래 끝에서는 목록을 따라 굴린다.
+ *
+ * 칸이 제 안에서 스크롤하게 되면서, 화면 밖에 있는 자리로는 카드를 놓을 수
+ * 없게 됐다. 끌고 가장자리에 대면 그쪽으로 밀어준다.
+ */
+function autoScroll(event) {
+  const list = listRef.value
+  if (!list || list.scrollHeight <= list.clientHeight) return
+
+  const box = list.getBoundingClientRect()
+  const edge = 52
+  if (event.clientY < box.top + edge) list.scrollTop -= 14
+  else if (event.clientY > box.bottom - edge) list.scrollTop += 14
+}
+
 function onDragOver(event) {
   if (props.readOnly) {
     event.dataTransfer.dropEffect = 'none'
     return
   }
   event.dataTransfer.dropEffect = 'move'
+  autoScroll(event)
   dropIndex.value = indexFromPointer(event)
 }
 
@@ -185,12 +202,42 @@ function onDragEnd() {
   margin: 2px 0 10px 15px;
 }
 
+/*
+ * 카드가 쌓이는 곳. 칸 안에서만 스크롤한다.
+ *
+ * 칸이 카드 수만큼 길어지면 한 칸이 스무 장일 때 페이지가 통째로 늘어나고,
+ * 보드 아래에 있는 활동 기록은 한참을 내려야 나온다. 칸 높이를 화면에 묶어
+ * 두면 카드가 몇 장이든 보드 전체 높이가 그대로다.
+ *
+ * min-height: 0 은 flex 자식이 내용보다 작아질 수 있게 하는 장치다.
+ * 이게 없으면 flex: 1 이 내용 높이를 그대로 밀어올려 overflow 가 걸리지 않는다.
+ */
 .col__list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 72px;
   flex: 1;
+  min-height: 0;
+  max-height: var(--col-list-max, clamp(220px, calc(100vh - 430px), 760px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.col__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.col__list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--line-strong);
+  background-clip: content-box;
+}
+
+.col__list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* 드롭 위치 표시선 */
