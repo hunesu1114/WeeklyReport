@@ -3,6 +3,7 @@ import ReportListView from '@/views/ReportListView.vue'
 import ReportEditorView from '@/views/ReportEditorView.vue'
 import KanbanView from '@/views/KanbanView.vue'
 import LoginView from '@/views/LoginView.vue'
+import MyPageView from '@/views/MyPageView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 /** 브라우저 탭에 항상 붙는 앱 이름. */
@@ -27,6 +28,8 @@ const router = createRouter({
       props: true,
       meta: { title: '주간보고 수정' },
     },
+
+    { path: '/me', name: 'my-page', component: MyPageView, meta: { title: '마이페이지' } },
 
     // 프로젝트를 안 고르고 들어오면 화면이 마지막으로 보던 보드로 옮겨준다
     { path: '/kanban', name: 'kanban', component: KanbanView, meta: { title: '칸반 보드' } },

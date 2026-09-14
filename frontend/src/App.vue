@@ -155,6 +155,9 @@ function logout() {
                 </span>
               </span>
             </div>
+            <RouterLink class="user__item user__item--link" to="/me" @click="menuOpen = false">
+              마이페이지
+            </RouterLink>
             <button class="user__item user__item--out" type="button" @click="logout">
               로그아웃
             </button>
@@ -354,6 +357,14 @@ function logout() {
   font-weight: 600;
   text-align: left;
   text-decoration: none;
+}
+
+.user__item--link {
+  color: var(--text);
+}
+
+.user__item--link:hover {
+  background: var(--surface-hover);
 }
 
 .user__item--out {
