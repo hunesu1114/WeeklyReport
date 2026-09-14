@@ -493,7 +493,9 @@ function onGlobalKeydown(event) {
   padding: 10px 20px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
+  /* 흰색을 박아 두면 다크에서 밝은 글자가 흰 바탕에 얹혀 읽히지 않는다 */
+  background: var(--surface-glass);
+  color: var(--text);
   backdrop-filter: blur(6px);
   box-shadow: var(--shadow-2);
 }

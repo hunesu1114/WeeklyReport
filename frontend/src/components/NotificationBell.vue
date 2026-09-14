@@ -259,7 +259,7 @@ async function readAll() {
   padding: 0 5px;
   border-radius: 999px;
   background: var(--danger-bright);
-  color: #fff;
+  color: var(--on-danger);
   font-size: 11px;
   font-weight: 800;
   line-height: 18px;
