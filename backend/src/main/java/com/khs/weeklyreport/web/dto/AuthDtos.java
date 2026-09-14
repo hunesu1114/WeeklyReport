@@ -46,12 +46,20 @@ public final class AuthDtos {
             String username,
             String displayName,
             UserRole role,
+            boolean hasAvatar,
+            long avatarVersion,
             Instant createdAt
     ) {
         public static UserView of(AppUser user) {
             return new UserView(user.getId(), user.getUsername(), user.getDisplayName(),
-                    user.getRole(), user.getCreatedAt());
+                    user.getRole(), user.hasAvatar(), user.getAvatarVersion(), user.getCreatedAt());
         }
+    }
+
+    /** 마이페이지에서 표시 이름 바꾸기. */
+    public record ProfileRequest(
+            @NotBlank @Size(max = 50) String displayName
+    ) {
     }
 
     /** 로그인 화면이 '첫 계정 만들기'를 보여줄지 판단하는 데 쓴다. */

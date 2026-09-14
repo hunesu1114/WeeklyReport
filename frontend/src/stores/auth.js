@@ -41,6 +41,15 @@ export const useAuthStore = defineStore('auth', () => {
     setAuthToken(nextToken)
   }
 
+  /**
+   * 사용자 정보만 갈아끼운다. 마이페이지에서 이름·사진을 바꾸면
+   * 토큰은 그대로 두고 화면에 보이는 값만 따라가야 한다.
+   */
+  function applyUser(next) {
+    user.value = next
+    write(USER_KEY, next)
+  }
+
   async function login(payload) {
     apply(await authApi.login(payload))
     return user.value
@@ -73,5 +82,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, isLoggedIn, isAdmin, login, register, logout, refreshMe }
+  return { token, user, isLoggedIn, isAdmin, applyUser, login, register, logout, refreshMe }
 })

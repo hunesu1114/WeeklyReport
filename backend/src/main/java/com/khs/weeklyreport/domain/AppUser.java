@@ -37,6 +37,18 @@ public class AppUser {
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
+    /**
+     * 프로필 사진의 형식. 바이트는 {@link UserAvatar} 에 따로 둔다 —
+     * 로그인한 사람은 요청마다 이 엔티티를 읽는데, 사진까지 딸려 오면
+     * 매 요청이 수십 KB 씩 무거워진다.
+     */
+    @Column(name = "avatar_type", length = 50)
+    private String avatarType;
+
+    /** 사진이 바뀔 때마다 오른다. 브라우저 캐시를 끊는 데 쓴다. */
+    @Column(name = "avatar_version", nullable = false)
+    private long avatarVersion;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -47,5 +59,9 @@ public class AppUser {
 
     public boolean isAdmin() {
         return role == UserRole.ADMIN;
+    }
+
+    public boolean hasAvatar() {
+        return avatarType != null;
     }
 }

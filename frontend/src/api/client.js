@@ -92,6 +92,32 @@ export const authApi = {
   claimOrphans: () => http.post('/auth/orphans/claim').then((r) => r.data),
 }
 
+export const profileApi = {
+  update: (payload) => http.put('/profile', payload).then((r) => r.data),
+
+  uploadAvatar(file) {
+    const body = new FormData()
+    body.append('file', file)
+    // Content-Type 을 직접 쓰면 boundary 가 빠진다. axios 가 정하게 둔다.
+    return http.post('/profile/avatar', body).then((r) => r.data)
+  },
+
+  removeAvatar: () => http.delete('/profile/avatar').then((r) => r.data),
+}
+
+/**
+ * 프로필 사진 주소. 없으면 null 을 주고 화면은 이니셜로 그린다.
+ *
+ * 사진이 바뀌면 avatarVersion 이 올라 주소가 달라진다. 그래서 서버가 1년 캐시를
+ * 걸어도 바뀐 사진이 바로 보인다.
+ */
+export function avatarUrl(user) {
+  // 참여자 목록은 userId, 그 밖에는 id 로 내려온다. 둘 다 받는다.
+  const id = user?.id ?? user?.userId
+  if (!id || !user.hasAvatar) return null
+  return `/api/users/${id}/avatar?v=${user.avatarVersion ?? 0}`
+}
+
 export const reportApi = {
   list: (params) => http.get('/reports', { params }).then((r) => r.data),
   defaults: (params) => http.get('/reports/defaults', { params }).then((r) => r.data),
