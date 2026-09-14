@@ -113,9 +113,13 @@ async function changeRole(member, role) {
 
 async function remove(member) {
   const mine = member.userId === myUserId.value
+  // 담당 카드는 조용히 사라지는 게 아니라 담당 없음이 된다. 누르기 전에 알려준다.
+  const cards = member.assignedCount
+    ? `\n담당 중인 카드 ${member.assignedCount}장이 담당 없음이 됩니다.`
+    : ''
   const message = mine
-    ? `'${props.project.name}' 보드에서 나갈까요?\n다시 들어오려면 초대를 받아야 합니다.`
-    : `${member.displayName} 님을 내보낼까요?`
+    ? `'${props.project.name}' 보드에서 나갈까요?\n다시 들어오려면 초대를 받아야 합니다.${cards}`
+    : `${member.displayName} 님을 내보낼까요?${cards}`
   if (!window.confirm(message)) return
 
   busy.value = true
@@ -231,7 +235,10 @@ async function remove(member) {
                 {{ member.displayName }}
                 <span v-if="member.userId === myUserId" class="badge badge--ok">나</span>
               </strong>
-              <span class="tiny muted">{{ member.username }} · {{ timeAgo(member.joinedAt) }} 참여</span>
+              <span class="tiny muted">
+                {{ member.username }} · {{ timeAgo(member.joinedAt) }} 참여
+                <template v-if="member.assignedCount"> · 담당 {{ member.assignedCount }}장</template>
+              </span>
             </span>
 
             <select

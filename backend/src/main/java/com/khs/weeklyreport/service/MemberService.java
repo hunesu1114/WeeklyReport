@@ -4,6 +4,7 @@ import com.khs.weeklyreport.domain.*;
 import com.khs.weeklyreport.realtime.RealtimeEvent;
 import com.khs.weeklyreport.realtime.RealtimePublisher;
 import com.khs.weeklyreport.repository.AppUserRepository;
+import com.khs.weeklyreport.repository.KanbanCardRepository;
 import com.khs.weeklyreport.repository.ProjectInvitationRepository;
 import com.khs.weeklyreport.repository.ProjectMemberRepository;
 import com.khs.weeklyreport.security.CurrentUser;
@@ -11,7 +12,9 @@ import com.khs.weeklyreport.web.dto.TeamDtos;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** 보드 참여자와 초대. */
 @Service
@@ -20,6 +23,7 @@ public class MemberService {
     private final ProjectMemberRepository memberRepository;
     private final ProjectInvitationRepository invitationRepository;
     private final AppUserRepository userRepository;
+    private final KanbanCardRepository cardRepository;
     private final ProjectAccess projectAccess;
     private final NotificationService notifications;
     private final ActivityService activities;
@@ -29,6 +33,7 @@ public class MemberService {
     public MemberService(ProjectMemberRepository memberRepository,
                          ProjectInvitationRepository invitationRepository,
                          AppUserRepository userRepository,
+                         KanbanCardRepository cardRepository,
                          ProjectAccess projectAccess,
                          NotificationService notifications,
                          ActivityService activities,
@@ -37,6 +42,7 @@ public class MemberService {
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
         this.userRepository = userRepository;
+        this.cardRepository = cardRepository;
         this.projectAccess = projectAccess;
         this.notifications = notifications;
         this.activities = activities;
@@ -49,7 +55,17 @@ public class MemberService {
     @Transactional(readOnly = true)
     public List<TeamDtos.MemberView> members(Long projectId) {
         projectAccess.requireRead(projectId);
-        return memberRepository.findMembers(projectId).stream().map(TeamDtos.MemberView::of).toList();
+
+        // 사람마다 카드를 세면 멤버 수만큼 쿼리가 나간다. 한 번에 묶어 센다.
+        Map<Long, Long> assigned = new HashMap<>();
+        for (Object[] row : cardRepository.countAssignedPerMember(projectId)) {
+            assigned.put((Long) row[0], ((Number) row[1]).longValue());
+        }
+
+        return memberRepository.findMembers(projectId).stream()
+                .map(member -> TeamDtos.MemberView.of(
+                        member, assigned.getOrDefault(member.getUser().getId(), 0L)))
+                .toList();
     }
 
     @Transactional
@@ -90,12 +106,17 @@ public class MemberService {
         }
 
         String name = member.getUser().getDisplayName();
+
+        // 명단에서 빠진 사람이 카드에 담당자로 남아 있으면, 그 카드는 제목 하나
+        // 고치려 해도 "참여자만 담당자로 지정할 수 있다"며 거절당해 손댈 수 없게 된다.
+        int unassigned = cardRepository.clearAssignee(projectId, userId);
         memberRepository.delete(member);
 
+        String detail = unassigned == 0 ? null : "담당 카드 %d장이 담당 없음이 되었습니다".formatted(unassigned);
         if (leavingMyself) {
-            activities.member(project, ActivityType.MEMBER_LEFT, name, null);
+            activities.member(project, ActivityType.MEMBER_LEFT, name, detail);
         } else {
-            activities.member(project, ActivityType.MEMBER_REMOVED, name, null);
+            activities.member(project, ActivityType.MEMBER_REMOVED, name, detail);
             notifications.send(member.getUser(), NotificationType.MEMBER_REMOVED,
                     "'%s' 보드에서 제외되었습니다".formatted(project.getName()), null, null);
         }

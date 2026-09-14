@@ -7,6 +7,7 @@ import com.khs.weeklyreport.domain.ProjectMember;
 import com.khs.weeklyreport.domain.ProjectRole;
 import com.khs.weeklyreport.realtime.RealtimePublisher;
 import com.khs.weeklyreport.repository.AppUserRepository;
+import com.khs.weeklyreport.repository.KanbanCardRepository;
 import com.khs.weeklyreport.repository.ProjectInvitationRepository;
 import com.khs.weeklyreport.repository.ProjectMemberRepository;
 import com.khs.weeklyreport.security.CurrentUser;
@@ -34,6 +35,7 @@ class MemberServiceTest {
     private ProjectMemberRepository memberRepository;
     private ProjectInvitationRepository invitationRepository;
     private AppUserRepository userRepository;
+    private KanbanCardRepository cardRepository;
     private ProjectAccess access;
     private MemberService service;
 
@@ -47,6 +49,7 @@ class MemberServiceTest {
         memberRepository = mock(ProjectMemberRepository.class);
         invitationRepository = mock(ProjectInvitationRepository.class);
         userRepository = mock(AppUserRepository.class);
+        cardRepository = mock(KanbanCardRepository.class);
         access = mock(ProjectAccess.class);
 
         when(access.requireRead(anyLong())).thenReturn(project);
@@ -58,7 +61,7 @@ class MemberServiceTest {
         when(currentUser.requireEntity()).thenReturn(user(ME, "나"));
 
         service = new MemberService(memberRepository, invitationRepository, userRepository,
-                access, mock(NotificationService.class), mock(ActivityService.class),
+                cardRepository, access, mock(NotificationService.class), mock(ActivityService.class),
                 currentUser, mock(RealtimePublisher.class));
     }
 
@@ -126,6 +129,18 @@ class MemberServiceTest {
         assertThatThrownBy(() -> service.invite(PROJECT_ID, new TeamDtos.InviteRequest(OTHER, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("이미 보낸 초대");
+    }
+
+    @Test
+    void 내보낸_사람의_담당_카드는_담당_없음이_된다() {
+        givenMember(OTHER, ProjectRole.MEMBER);
+        when(cardRepository.clearAssignee(PROJECT_ID, OTHER)).thenReturn(3);
+
+        service.remove(PROJECT_ID, OTHER);
+
+        // 명단에 없는 사람이 담당으로 남으면 그 카드는 제목 하나도 못 고치게 된다
+        verify(cardRepository).clearAssignee(PROJECT_ID, OTHER);
+        verify(memberRepository).delete(any(ProjectMember.class));
     }
 
     @Test

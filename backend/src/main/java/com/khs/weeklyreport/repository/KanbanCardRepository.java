@@ -3,6 +3,7 @@ package com.khs.weeklyreport.repository;
 import com.khs.weeklyreport.domain.KanbanCard;
 import com.khs.weeklyreport.domain.KanbanStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -135,4 +136,26 @@ public interface KanbanCardRepository extends JpaRepository<KanbanCard, Long> {
             group by c.project.id
             """)
     List<Object[]> summarize(@Param("projectIds") List<Long> projectIds, @Param("until") LocalDate until);
+
+    // ── 참여자 정리 ──────────────────────────────────────────
+
+    /** 보드 안에서 사람마다 담당 중인 카드 수. 내보내기 전에 무엇이 사라지는지 알린다. */
+    @Query("""
+            select c.assignee.id, count(c) from KanbanCard c
+            where c.project.id = :projectId and c.assignee is not null
+            group by c.assignee.id
+            """)
+    List<Object[]> countAssignedPerMember(@Param("projectId") Long projectId);
+
+    /**
+     * 보드를 떠난 사람의 담당을 비운다.
+     *
+     * <p>그대로 두면 명단에 없는 사람이 카드에 남는다. 보기에도 이상하지만,
+     * 그 카드를 열어 제목만 고치려 해도 담당자가 참여자가 아니라며 거절당해
+     * 손댈 수 없는 카드가 된다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update KanbanCard c set c.assignee = null "
+            + "where c.project.id = :projectId and c.assignee.id = :userId")
+    int clearAssignee(@Param("projectId") Long projectId, @Param("userId") Long userId);
 }

@@ -36,13 +36,19 @@ public final class TeamDtos {
             boolean hasAvatar,
             long avatarVersion,
             ProjectRole role,
+            /** 이 보드에서 담당 중인 카드 수. 내보내기 전에 무엇이 사라지는지 알린다. */
+            long assignedCount,
             Instant joinedAt
     ) {
         public static MemberView of(ProjectMember member) {
+            return of(member, 0);
+        }
+
+        public static MemberView of(ProjectMember member, long assignedCount) {
             AppUser user = member.getUser();
             return new MemberView(user.getId(), user.getUsername(), user.getDisplayName(),
                     user.hasAvatar(), user.getAvatarVersion(),
-                    member.getRole(), member.getJoinedAt());
+                    member.getRole(), assignedCount, member.getJoinedAt());
         }
     }
 
