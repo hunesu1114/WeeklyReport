@@ -179,7 +179,7 @@ const detailPlaceholder = computed(() =>
   background: var(--brand-soft);
   color: var(--brand);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .item__actions {

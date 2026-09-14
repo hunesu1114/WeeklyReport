@@ -349,7 +349,7 @@ async function onMembersChanged() {
       <div class="kanban__title">
         <h1>칸반 보드</h1>
         <p v-if="board" class="tiny muted">
-          전체 {{ totals.all }} · 진행할 일 {{ totals.open }} · 완료 {{ totals.done }}
+          <span class="num">전체 {{ totals.all }} · 진행할 일 {{ totals.open }} · 완료 {{ totals.done }}</span>
           <template v-if="totals.dueSoon">
             · <span class="kanban__due">임박 {{ totals.dueSoon }}</span>
           </template>
@@ -548,12 +548,12 @@ async function onMembersChanged() {
 
 .kanban__due {
   color: var(--danger);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .kanban__role {
   color: var(--brand-strong);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .kanban__actions {
@@ -606,13 +606,13 @@ async function onMembersChanged() {
   background: var(--bg-subtle);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .team__label {
   margin-left: 4px;
   color: var(--text-3);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .team__warn {
@@ -620,7 +620,7 @@ async function onMembersChanged() {
   border-radius: 999px;
   background: var(--warn-soft);
   color: var(--warn);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .team__filter {
@@ -640,7 +640,7 @@ async function onMembersChanged() {
   background: transparent;
   color: var(--text-3);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .team__chip:hover {
@@ -665,12 +665,13 @@ async function onMembersChanged() {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 13px;
+  padding: 6px 11px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  /* 알약은 배지에만 남긴다. 같은 줄의 버튼과 곡률이 다르면 한 세트로 안 보인다 */
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-2);
-  font-size: 13px;
+  font-size: var(--fs);
   font-weight: 600;
   transition: border-color 0.12s, background 0.12s, color 0.12s;
 }
@@ -698,7 +699,7 @@ async function onMembersChanged() {
   background: var(--bg-subtle);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .tab--on .tab__count {
@@ -711,7 +712,7 @@ async function onMembersChanged() {
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .tab__role {
@@ -720,7 +721,7 @@ async function onMembersChanged() {
   background: var(--warn-soft);
   color: var(--warn);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .kanban__readonly {
@@ -728,7 +729,7 @@ async function onMembersChanged() {
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-sm);
   color: var(--text-3);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* ---------- 보드 ---------- */

@@ -430,7 +430,7 @@ async function toggleLogs() {
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .clog__toggle:hover {
@@ -507,7 +507,7 @@ async function toggleLogs() {
   background: var(--surface);
   color: var(--text-3);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
@@ -547,10 +547,10 @@ async function toggleLogs() {
 }
 .due--warn {
   color: var(--warn);
-  font-weight: 700;
+  font-weight: 600;
 }
 .due--danger {
   color: var(--danger);
-  font-weight: 700;
+  font-weight: 600;
 }
 </style>

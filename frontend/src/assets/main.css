@@ -59,10 +59,17 @@
   --violet: #7c3aed;
   --violet-soft: #f2ecfe;
 
-  /* 형태 */
-  --radius: 12px;
-  --radius-sm: 8px;
-  --radius-xs: 6px;
+  /* 형태 — 곡률을 조여 화면을 또렷하게. 셋이 한 세트로 읽히도록 간격을 좁게 둔다 */
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-xs: 4px;
+
+  /*
+   * 밀도. 매일 여러 번 여는 도구라 한 화면에 더 담는 편이 낫다.
+   * 답답하면 이 두 줄만 14px / 12px 로 되돌리면 된다.
+   */
+  --fs: 13px;
+  --fs-sm: 11.5px;
   --shadow-1: 0 1px 2px rgba(16, 20, 27, 0.05), 0 1px 3px rgba(16, 20, 27, 0.04);
   --shadow-2: 0 6px 20px rgba(16, 20, 27, 0.09);
   --shadow-3: 0 18px 50px rgba(16, 20, 27, 0.18);
@@ -189,7 +196,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--fs);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.18s ease, color 0.18s ease;
@@ -241,7 +248,7 @@ a {
 
 .control {
   width: 100%;
-  padding: 8px 11px;
+  padding: 7px 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -305,7 +312,7 @@ input[type='date'].control {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 7px 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -367,22 +374,27 @@ input[type='date'].control {
 }
 
 .btn--sm {
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 4px 9px;
+  font-size: var(--fs-sm);
 }
 
 .btn--icon {
   padding: 0;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 
 /* ---------- 카드 ---------- */
+/*
+ * 테두리·채움·곡률·그림자는 저마다 "여기부터 다른 것"이라는 신호다.
+ * 넷을 전부 얹으면 모든 블록이 같은 무게가 되어 위계가 사라진다.
+ * 바닥에 붙어 있는 것(카드·칸반 카드)은 테두리로만 구분하고,
+ * 그림자는 실제로 떠 있는 것(모달·드롭다운·토스트·요약 띠)에만 쓴다.
+ */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-1);
 }
 
 .card__head {
@@ -390,19 +402,19 @@ input[type='date'].control {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 16px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
 }
 
 .card__title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: var(--fs);
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
 .card__body {
-  padding: 16px;
+  padding: 14px;
 }
 
 /* ---------- 배지 ---------- */
@@ -415,7 +427,7 @@ input[type='date'].control {
   background: var(--bg-subtle);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -445,7 +457,12 @@ input[type='date'].control {
 }
 
 .tiny {
-  font-size: 12px;
+  font-size: var(--fs-sm);
+}
+
+/* 숫자가 세로로 줄 맞춰야 하는 곳. 자릿수가 바뀌어도 흔들리지 않는다 */
+.num {
+  font-variant-numeric: tabular-nums;
 }
 
 .spinner {

@@ -44,9 +44,13 @@ const style = computed(() => ({
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: var(--brand-soft);
-  color: var(--brand-strong);
-  font-weight: 800;
+  /*
+   * 중립으로 둔다. 참여자 목록·카드 담당자·활동 기록에 아바타가 수십 개 뜨는데
+   * 전부 초록이면 정작 눌러야 할 버튼이 묻힌다.
+   */
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-weight: 600;
   line-height: 1;
   user-select: none;
 }

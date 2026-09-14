@@ -127,7 +127,7 @@ function onDragEnd() {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-subtle);
@@ -178,7 +178,7 @@ function onDragEnd() {
   border: 1px solid var(--line);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .col__hint {
@@ -188,8 +188,8 @@ function onDragEnd() {
 .col__list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 80px;
+  gap: 6px;
+  min-height: 72px;
   flex: 1;
 }
 
@@ -209,7 +209,7 @@ function onDragEnd() {
 }
 
 .col__empty {
-  padding: 18px 10px;
+  padding: 16px 10px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-sm);
   background: transparent;

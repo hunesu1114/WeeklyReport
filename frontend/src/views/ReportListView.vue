@@ -241,7 +241,7 @@ async function remove(report) {
   background: var(--bg-subtle);
   color: var(--text-3);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }

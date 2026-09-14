@@ -261,7 +261,7 @@ async function readAll() {
   background: var(--danger-bright);
   color: var(--on-danger);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 18px;
 }
 
@@ -308,7 +308,7 @@ async function readAll() {
   background: transparent;
   color: var(--text-3);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .pop__tab:hover {
@@ -328,7 +328,7 @@ async function readAll() {
   background: var(--bg-subtle);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .pop__tabcount--warn {
@@ -378,7 +378,7 @@ async function readAll() {
 }
 
 .pop__title {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -388,7 +388,7 @@ async function readAll() {
 .pop__due {
   flex: none;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .pop__due--warn {
@@ -435,7 +435,7 @@ async function readAll() {
 
 .note__title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.45;
   word-break: break-word;
 }

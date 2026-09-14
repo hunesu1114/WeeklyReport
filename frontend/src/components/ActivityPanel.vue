@@ -156,7 +156,7 @@ defineExpose({ reload })
   background: transparent;
   color: var(--text-3);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .alog__tab:hover {

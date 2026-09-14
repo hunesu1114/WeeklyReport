@@ -521,6 +521,7 @@ function onGlobalKeydown(event) {
 .summary__cell strong {
   font-size: 15px;
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .summary__negative {

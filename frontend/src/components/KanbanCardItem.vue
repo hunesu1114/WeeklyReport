@@ -78,21 +78,23 @@ function onDragStart(event) {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 11px 12px 10px;
+  gap: 5px;
+  padding: 9px 10px 8px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--shadow-1);
   cursor: grab;
-  transition: border-color 0.12s, box-shadow 0.12s, transform 0.08s, opacity 0.12s;
+  transition: border-color 0.12s, background-color 0.12s, opacity 0.12s;
 }
 
+/*
+ * 들어올리지 않는다. 보드에 카드가 스무 장씩 놓이는데 하나하나가 떠 있으면
+ * 어느 것도 떠 있지 않은 것과 같다. 지금 가리키는 카드만 배경으로 답한다.
+ */
 .kcard:hover {
   border-color: var(--line-strong);
-  box-shadow: var(--shadow-2);
-  transform: translateY(-1px);
+  background: var(--surface-hover);
 }
 
 .kcard:focus-visible {
@@ -152,8 +154,8 @@ function onDragStart(event) {
 
 .kcard__title {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs);
+  font-weight: 600;
   line-height: 1.45;
   letter-spacing: -0.01em;
   word-break: break-word;
@@ -161,7 +163,7 @@ function onDragStart(event) {
 
 .kcard__content {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-3);
   /* 카드가 길어지면 보드가 흐트러진다. 세 줄까지만 보여주고 자른다 */
@@ -180,10 +182,11 @@ function onDragStart(event) {
   align-items: center;
   gap: 10px;
   margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .kcard__due {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .kcard__due--neutral {

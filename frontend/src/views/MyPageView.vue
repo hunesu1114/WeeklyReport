@@ -432,7 +432,7 @@ function openBoard(project) {
 
 .my__bad {
   color: var(--danger);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* ---------- 소속 보드 ---------- */

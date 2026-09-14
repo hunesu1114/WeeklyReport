@@ -209,7 +209,7 @@ function onKeydown(event) {
   background: var(--surface);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.5;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }

@@ -130,7 +130,7 @@ function onDrop() {
   background: none;
   padding: 0;
   color: var(--brand-strong);
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: underline;
 }
 </style>

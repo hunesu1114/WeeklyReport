@@ -179,7 +179,7 @@ function applyDefaults() {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-2);
 }
 

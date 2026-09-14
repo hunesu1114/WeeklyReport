@@ -217,7 +217,7 @@ function isUsed(name) {
   background: transparent;
   color: var(--text-3);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .klink__chip:hover {
@@ -312,7 +312,7 @@ function isUsed(name) {
   background: var(--bg-subtle);
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
 }
 
@@ -342,7 +342,7 @@ function isUsed(name) {
 }
 
 .row__due {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .row__due--warn {
