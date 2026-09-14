@@ -346,11 +346,21 @@ create index idx_card_activity_card on card_activity (card_id, created_at desc);
 | 메서드 | 경로 | 권한 |
 |---|---|---|
 | `GET` | `/api/kanban/projects/{id}/members` | 읽기 |
-| `POST` | `/api/kanban/projects/{id}/members` | OWNER |
 | `PATCH` | `/api/kanban/projects/{id}/members/{userId}` (역할 변경) | OWNER |
 | `DELETE` | `/api/kanban/projects/{id}/members/{userId}` | OWNER (본인이면 나가기) |
-| `GET` | `/api/meta/users?query=` | 로그인 (멤버 추가 자동완성) |
-| `GET` | `/api/kanban/projects/{id}/stream` | 읽기 (Phase 2) |
+| `POST` | `/api/kanban/projects/{id}/invitations` | OWNER |
+| `GET` | `/api/kanban/projects/{id}/invitations` (대기 중) | 읽기 |
+| `DELETE` | `/api/kanban/projects/{id}/invitations/{id}` (취소) | OWNER |
+| `GET` | `/api/kanban/invitations` (내가 받은) | 로그인 |
+| `POST` | `/api/kanban/invitations/{id}/accept` · `/decline` | 받은 본인 |
+| `GET` | `/api/meta/users?query=` | 로그인 (초대할 사람 자동완성) |
+| `GET` | `/api/kanban/notifications`, `/notifications/{id}/read`, `/read-all` | 로그인 |
+| `GET` | `/api/kanban/projects/{id}/activities`, `.../cards/{cardId}/activities`, `/api/kanban/activities` | 읽기 |
+| `GET` | `/api/kanban/projects/{id}/export` (엑셀) | 읽기 |
+| `WS` | `/ws/kanban` | 첫 메시지로 인증, 보드는 멤버만 구독 |
+
+> 멤버 직접 추가(`POST .../members`)는 넣지 않았다. 초대를 보내고 상대가 수락해야
+> 참여자가 된다(11장). 실시간도 SSE 대신 WebSocket 으로 갔다(7장).
 
 **바뀌는 것**
 
@@ -368,11 +378,14 @@ create index idx_card_activity_card on card_activity (card_id, created_at desc);
 
 ## 11. 멤버 초대 방식
 
-사내 소규모라면 **아이디로 직접 추가**가 가장 단순하다. 초대 수락 절차 없이
-OWNER 가 넣으면 바로 멤버가 된다. 초대 링크·코드·메일은 조직 밖 사람과 협업할 때
-필요해지는 것이라 지금은 넣지 않는다.
+**초대 → 알림 → 수락**으로 간다. 초안은 "아이디로 직접 추가"였으나, 초대는 상대
+화면에 보드를 하나 더 붙이는 일이라 본인이 받아들이는 편이 맞다.
 
-화면: 보드 설정 → 멤버 → 아이디 검색(자동완성) → 역할 고르기 → 추가.
+화면: 참여자 → 아이디·이름 검색(자동완성) → 역할 고르기 → 초대하기.
+받은 사람의 알림함에 뜨고, 거기서 수락하면 참여자가 된다. 보낸 초대는 OWNER 가
+목록에서 보고 취소할 수 있다.
+
+초대 링크·코드·메일은 조직 밖 사람과 협업할 때 필요해지는 것이라 지금은 넣지 않는다.
 
 ---
 

@@ -87,13 +87,6 @@ public class TeamController {
         memberService.decline(id);
     }
 
-    /** 초대할 사람 찾기. username 과 표시 이름만 내려간다. */
-    @GetMapping("/users/search")
-    public List<TeamDtos.UserBrief> searchUsers(@RequestParam String query,
-                                                @RequestParam(required = false) Long projectId) {
-        return memberService.searchUsers(query, projectId);
-    }
-
     // ── 알림 ─────────────────────────────────────────────────
 
     @GetMapping("/notifications")

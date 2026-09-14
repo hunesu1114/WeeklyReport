@@ -206,7 +206,7 @@ export const teamApi = {
   decline: (id) => http.post(`/kanban/invitations/${id}/decline`),
 
   searchUsers: (query, projectId) =>
-    http.get('/kanban/users/search', { params: { query, projectId } }).then((r) => r.data),
+    http.get('/meta/users', { params: { query, projectId } }).then((r) => r.data),
 
   inbox: (limit) => http.get('/kanban/notifications', { params: { limit } }).then((r) => r.data),
   markAllRead: () => http.post('/kanban/notifications/read-all'),
