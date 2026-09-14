@@ -1,12 +1,18 @@
 package com.khs.weeklyreport.web;
 
+import com.khs.weeklyreport.service.KanbanExportService;
 import com.khs.weeklyreport.service.KanbanService;
 import com.khs.weeklyreport.web.dto.KanbanDtos;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -14,10 +20,15 @@ import java.util.List;
 @RequestMapping("/api/kanban")
 public class KanbanController {
 
-    private final KanbanService kanbanService;
+    private static final MediaType XLSX = MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-    public KanbanController(KanbanService kanbanService) {
+    private final KanbanService kanbanService;
+    private final KanbanExportService exportService;
+
+    public KanbanController(KanbanService kanbanService, KanbanExportService exportService) {
         this.kanbanService = kanbanService;
+        this.exportService = exportService;
     }
 
     // ── 프로젝트 ──────────────────────────────────────────────
@@ -51,6 +62,20 @@ public class KanbanController {
     @GetMapping("/projects/{id}/board")
     public KanbanDtos.BoardView board(@PathVariable Long id) {
         return kanbanService.board(id);
+    }
+
+    /** 보드의 모든 카드를 엑셀 한 장으로 내려받는다. 볼 수 있으면 받아갈 수 있다. */
+    @GetMapping("/projects/{id}/export")
+    public ResponseEntity<byte[]> exportBoard(@PathVariable Long id) {
+        KanbanExportService.ExportResult result = exportService.exportProject(id);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(result.filename(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(XLSX)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, HttpHeaders.CONTENT_DISPOSITION)
+                .body(result.content());
     }
 
     // ── 카드 ─────────────────────────────────────────────────

@@ -155,6 +155,17 @@ export const kanbanApi = {
 
   board: (projectId) => http.get(`/kanban/projects/${projectId}/board`).then((r) => r.data),
 
+  /** 보드의 모든 카드를 엑셀 한 장으로 내려받는다. 파일명은 서버가 정한다. */
+  async exportBoard(projectId) {
+    const response = await http.get(`/kanban/projects/${projectId}/export`, {
+      responseType: 'blob',
+    })
+    const filename =
+      parseFilename(response.headers['content-disposition']) || `kanban-${projectId}.xlsx`
+    saveBlob(response.data, filename)
+    return filename
+  },
+
   createCard: (payload) => http.post('/kanban/cards', payload).then((r) => r.data),
   updateCard: (id, payload) => http.put(`/kanban/cards/${id}`, payload).then((r) => r.data),
   moveCard: (id, payload) => http.put(`/kanban/cards/${id}/move`, payload).then((r) => r.data),

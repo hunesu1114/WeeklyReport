@@ -36,6 +36,7 @@ const editingProject = ref(null)
 const conflict = ref(null)
 const membersOpen = ref(false)
 const activityPanel = ref(null)
+const exporting = ref(false)
 
 const projectId = computed(() => (route.params.projectId ? Number(route.params.projectId) : null))
 const projects = computed(() => store.projects)
@@ -315,6 +316,20 @@ async function goToAnotherBoard() {
   else await router.replace({ name: 'kanban' })
 }
 
+/** 보드를 통째로 엑셀로 받는다. 담당자 배분이나 주간 정리를 엑셀에서 하는 사람이 많다. */
+async function exportBoard() {
+  if (!projectId.value) return
+  exporting.value = true
+  try {
+    const filename = await kanbanApi.exportBoard(projectId.value)
+    toast.success(`${filename} 파일을 내려받았습니다.`)
+  } catch (error) {
+    toast.error(`엑셀을 만들지 못했습니다. ${error.message}`)
+  } finally {
+    exporting.value = false
+  }
+}
+
 async function onMembersChanged() {
   await Promise.all([loadMembers(), store.loadProjects(true)])
   await loadBoard({ quiet: true })
@@ -338,6 +353,17 @@ async function onMembersChanged() {
       </div>
 
       <div class="kanban__actions">
+        <button
+          v-if="board"
+          class="btn btn--sm"
+          type="button"
+          :disabled="exporting"
+          title="이 보드의 카드를 모두 엑셀로 내려받습니다"
+          @click="exportBoard"
+        >
+          <span v-if="exporting" class="spinner"></span>
+          엑셀 내려받기
+        </button>
         <button v-if="board && amOwner" class="btn btn--sm" type="button" @click="openProjectSettings">
           프로젝트 설정
         </button>
