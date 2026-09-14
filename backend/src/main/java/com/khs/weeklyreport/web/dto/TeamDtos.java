@@ -2,7 +2,6 @@ package com.khs.weeklyreport.web.dto;
 
 import com.khs.weeklyreport.domain.*;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 
