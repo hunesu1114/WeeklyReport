@@ -438,7 +438,13 @@ function onGlobalKeydown(event) {
 
 .editor__buttons {
   display: flex;
-  align-items: center;
+  /*
+   * 한 줄에 btn--sm(보조)과 btn(저장·다운로드)이 섞여 있어 높이가 어긋난다.
+   * stretch 로 두면 가장 큰 버튼에 나머지가 맞춰진다 — 숫자를 박지 않으므로
+   * 글꼴이나 여백을 바꿔도 따라온다. 글자 크기 차이는 그대로 둬서
+   * 주 동작과 보조 동작이 여전히 구분된다.
+   */
+  align-items: stretch;
   gap: 8px;
 }
 
