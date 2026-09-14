@@ -108,9 +108,16 @@ function onDragEnd() {
         <div v-if="dropIndex === index + 1" class="col__marker" aria-hidden="true"></div>
       </template>
 
-      <button v-if="!cards.length" class="col__empty" type="button" @click="emit('add', status)">
+      <button
+        v-if="!cards.length && !readOnly"
+        class="col__empty"
+        type="button"
+        @click="emit('add', status)"
+      >
         카드 없음 · 눌러서 추가
       </button>
+      <!-- 읽기 전용에게 '눌러서 추가'를 보여주면 눌렀다가 아무 일도 일어나지 않는다 -->
+      <p v-else-if="!cards.length" class="col__empty col__empty--static">카드 없음</p>
     </div>
   </section>
 </template>
@@ -213,5 +220,16 @@ function onDragEnd() {
 .col__empty:hover {
   border-color: var(--brand);
   color: var(--brand-strong);
+}
+
+/* 누를 수 없는 자리 표시. 손이 올라가도 반응하지 않는다 */
+.col__empty--static {
+  margin: 0;
+  text-align: center;
+}
+
+.col__empty--static:hover {
+  border-color: var(--line-strong);
+  color: var(--text-4);
 }
 </style>

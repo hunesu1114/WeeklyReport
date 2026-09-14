@@ -119,6 +119,25 @@ export function useKanbanSocket(handlers = {}) {
     else if (connected.value) send({ type: 'subscribe', projectId })
   }
 
+  /**
+   * 탭으로 돌아왔을 때의 안전망.
+   *
+   * 브라우저는 백그라운드 탭의 연결을 소리 없이 끊고, 절전으로 들어갔다 깨어난
+   * 노트북은 끊긴 줄도 모른 채 한참을 보낸다. 그 사이의 변경은 신호가 오지 않으므로,
+   * 돌아오면 바로 다시 붙고 화면도 한 번 읽어 맞춘다.
+   */
+  function onVisibility() {
+    if (document.visibilityState !== 'visible' || !auth.token) return
+    if (!socket) {
+      clearTimeout(retryTimer)
+      retryDelay = 1000
+      connect()
+    }
+    handlers.resync?.()
+  }
+
+  document.addEventListener('visibilitychange', onVisibility)
+
   function close() {
     closedByUs = true
     clearTimeout(retryTimer)
@@ -128,7 +147,10 @@ export function useKanbanSocket(handlers = {}) {
     connected.value = false
   }
 
-  onBeforeUnmount(close)
+  onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', onVisibility)
+    close()
+  })
 
   return { connected, connect, watchProject, close }
 }

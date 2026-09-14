@@ -26,6 +26,12 @@ const auth = useAuthStore()
  */
 const socket = useKanbanSocket({
   'inbox-changed': () => inbox.load().catch(() => {}),
+  // 탭으로 돌아왔을 때. 자리를 비운 사이 도착한 초대가 있을 수 있다.
+  resync: () => {
+    if (!auth.isLoggedIn) return
+    inbox.load().catch(() => {})
+    kanban.loadDueSoon().catch(() => {})
+  },
 })
 
 const menuOpen = ref(false)

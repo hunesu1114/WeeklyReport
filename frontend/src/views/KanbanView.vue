@@ -96,6 +96,13 @@ const socket = useKanbanSocket({
   'inbox-changed': () => {
     inbox.load().catch(() => {})
   },
+  // 탭으로 돌아왔을 때. 자리를 비운 사이의 변경은 신호가 오지 않았다.
+  resync: () => {
+    if (!projectId.value) return
+    loadBoard({ quiet: true })
+    store.loadDueSoon().catch(() => {})
+    activityPanel.value?.reload()
+  },
 })
 
 onMounted(async () => {
@@ -368,15 +375,18 @@ async function onMembersChanged() {
           프로젝트 설정
         </button>
         <button class="btn btn--sm" type="button" @click="openNewProject">+ 새 프로젝트</button>
+        <!-- 읽기 전용 참여자에게는 아예 감춘다. 막힌 버튼을 눌러보고
+             거절당하는 것보다 처음부터 안 보이는 게 낫다. -->
         <button
+          v-if="canWrite"
           class="btn btn--sm btn--primary"
           type="button"
-          :disabled="!board || !canWrite"
-          :title="canWrite ? '' : '읽기 전용으로 참여 중입니다'"
+          :disabled="!board"
           @click="openNewCard('BACKLOG')"
         >
           + 카드 추가
         </button>
+        <span v-else-if="board" class="kanban__readonly tiny">읽기 전용으로 참여 중</span>
       </div>
     </header>
 
@@ -391,6 +401,11 @@ async function onMembersChanged() {
       >
         <span class="tab__dot" :style="{ background: project.color || 'var(--text-4)' }"></span>
         {{ project.name }}
+        <!-- 읽기 전용 보드는 탭에서부터 표가 나야 한다. 카드를 열고 나서
+             못 고친다는 걸 알면 이미 한 번 헛걸음한 뒤다. -->
+        <span v-if="project.myRole === 'VIEWER'" class="tab__role" title="읽기 전용으로 참여 중">
+          읽기
+        </span>
         <span class="tab__count">{{ project.openCount }}</span>
         <span v-if="project.dueSoonCount" class="tab__due" :title="`임박 ${project.dueSoonCount}건`">
           {{ project.dueSoonCount }}
@@ -697,6 +712,23 @@ async function onMembersChanged() {
   color: var(--danger);
   font-size: 11px;
   font-weight: 800;
+}
+
+.tab__role {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kanban__readonly {
+  padding: 6px 11px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-weight: 700;
 }
 
 /* ---------- 보드 ---------- */
