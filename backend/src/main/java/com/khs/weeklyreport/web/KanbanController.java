@@ -82,18 +82,26 @@ public class KanbanController {
 
     // ── 조회 ─────────────────────────────────────────────────
 
-    /** 완료일이 임박한 카드. 헤더 알림이 쓴다. */
+    /**
+     * 완료일이 임박한 카드. 헤더 알림이 쓴다.
+     * 기본은 내가 담당한 것. scope=team 이면 내가 속한 보드 전체를 본다.
+     */
     @GetMapping("/cards/due-soon")
-    public List<KanbanDtos.CardView> dueSoon(@RequestParam(required = false) Integer days) {
-        return kanbanService.dueSoon(days);
+    public List<KanbanDtos.CardView> dueSoon(@RequestParam(required = false) Integer days,
+                                             @RequestParam(required = false) String scope) {
+        return kanbanService.dueSoon(days, "team".equalsIgnoreCase(scope));
     }
 
-    /** 시작일이 기간 안에 있는 카드. 주간보고 작성 화면이 쓴다. */
+    /**
+     * 시작일이 기간 안에 있는 카드. 주간보고 작성 화면이 쓴다.
+     * 기본은 내가 담당한 것 — 팀 보드의 남의 카드가 내 주간보고에 쏟아지면 안 된다.
+     */
     @GetMapping("/cards/started-between")
     public List<KanbanDtos.CardView> startedBetween(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) Long projectId) {
-        return kanbanService.startedBetween(from, to, projectId);
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(defaultValue = "true") boolean mineOnly) {
+        return kanbanService.startedBetween(from, to, projectId, mineOnly);
     }
 }

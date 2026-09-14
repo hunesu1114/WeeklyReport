@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { kanbanApi } from '@/api/client'
 import { PRIORITY_META, dueLabel, dueTone } from '@/utils/kanban'
 
@@ -24,6 +25,11 @@ const cards = ref([])
 const loading = ref(false)
 const error = ref('')
 const collapsed = ref(false)
+/**
+ * 기본은 내가 담당한 카드만. 팀 보드에서는 남의 카드가 훨씬 많아서,
+ * 전체를 기본으로 두면 내 주간보고에 남의 일이 쏟아진다.
+ */
+const mineOnly = ref(true)
 
 /** 프로젝트별로 묶는다. 보고서의 '업무명' 이 프로젝트 단위이기 때문이다. */
 const groups = computed(() => {
@@ -42,7 +48,7 @@ const groups = computed(() => {
   return [...byProject.values()]
 })
 
-watch(() => [props.from, props.to], load, { immediate: true })
+watch(() => [props.from, props.to, mineOnly.value], load, { immediate: true })
 
 async function load() {
   if (!props.from || !props.to) {
@@ -52,7 +58,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    cards.value = await kanbanApi.startedBetween(props.from, props.to)
+    cards.value = await kanbanApi.startedBetween(props.from, props.to, null, mineOnly.value)
   } catch (e) {
     cards.value = []
     error.value = e.message
@@ -101,16 +107,38 @@ function isUsed(name) {
           <template v-if="from && to"> · {{ from }} ~ {{ to }}</template>
         </p>
       </div>
-      <button class="btn btn--ghost btn--sm" type="button" @click="collapsed = !collapsed">
-        {{ collapsed ? '펼치기' : '접기' }}
-      </button>
+      <div class="klink__actions">
+        <div v-if="!collapsed" class="klink__scope" role="group" aria-label="조회 범위">
+          <button
+            class="klink__chip"
+            :class="{ 'klink__chip--on': mineOnly }"
+            type="button"
+            @click="mineOnly = true"
+          >
+            내 카드
+          </button>
+          <button
+            class="klink__chip"
+            :class="{ 'klink__chip--on': !mineOnly }"
+            type="button"
+            title="내가 속한 보드의 카드를 모두 봅니다"
+            @click="mineOnly = false"
+          >
+            팀 전체
+          </button>
+        </div>
+        <button class="btn btn--ghost btn--sm" type="button" @click="collapsed = !collapsed">
+          {{ collapsed ? '펼치기' : '접기' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="!collapsed" class="klink__body">
       <p v-if="loading" class="klink__state muted tiny">불러오는 중…</p>
       <p v-else-if="error" class="klink__state klink__state--error tiny">{{ error }}</p>
       <p v-else-if="!cards.length" class="klink__state muted tiny">
-        이 기간에 시작한 칸반 카드가 없습니다.
+        이 기간에 시작한
+        <strong>{{ mineOnly ? '내 담당' : '팀' }}</strong> 칸반 카드가 없습니다.
         <br />카드의 <strong>생성일</strong>이 금주 기간 안에 있으면 여기에 모입니다.
       </p>
 
@@ -138,6 +166,7 @@ function isUsed(name) {
               {{ STATUS_TAG[card.status] }}
             </span>
             <span class="row__title" :title="card.content || card.title">{{ card.title }}</span>
+            <UserAvatar v-if="!mineOnly && card.assignee" :user="card.assignee" :size="18" />
             <span class="row__prio tiny muted">{{ PRIORITY_META[card.priority]?.label }}</span>
             <span
               v-if="card.dueDate"
@@ -164,6 +193,41 @@ function isUsed(name) {
 <style scoped>
 .klink__range {
   margin: 2px 0 0;
+}
+
+.klink__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.klink__scope {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.klink__chip {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.klink__chip:hover {
+  color: var(--text);
+}
+
+.klink__chip--on {
+  background: var(--surface);
+  color: var(--brand-strong);
+  box-shadow: var(--shadow-1);
 }
 
 .klink__body {

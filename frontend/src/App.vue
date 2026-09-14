@@ -1,11 +1,14 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import BrandMark from '@/components/BrandMark.vue'
-import DueSoonBell from '@/components/DueSoonBell.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { useToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
+import { useKanbanSocket } from '@/composables/useKanbanSocket'
 import { useKanbanStore } from '@/stores/kanban'
+import { useNotificationStore } from '@/stores/notifications'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -13,9 +16,63 @@ const router = useRouter()
 const { toasts, dismiss } = useToast()
 const { isDark, toggle } = useTheme()
 const kanban = useKanbanStore()
+const inbox = useNotificationStore()
 const auth = useAuthStore()
 
+/**
+ * 알림용 연결. 보드를 보고 있지 않아도 초대는 도착해야 한다.
+ * 칸반 화면은 자기 것을 따로 열어 보드를 구독한다 — 연결 두 개는
+ * 각자 살고 죽어서, 보드를 떠난다고 알림이 끊기지 않는다.
+ */
+const socket = useKanbanSocket({
+  'inbox-changed': () => inbox.load().catch(() => {}),
+})
+
 const menuOpen = ref(false)
+const userMenu = ref(null)
+
+/**
+ * 메뉴는 바깥을 눌렀을 때 닫는다.
+ *
+ * mouseleave 로 닫으면 버튼에서 메뉴로 마우스를 옮기는 도중 그 사이 여백을
+ * 지나는 순간 닫혀 버려서, 메뉴 항목을 아예 누를 수 없다.
+ */
+function onDocPointerDown(event) {
+  if (menuOpen.value && userMenu.value && !userMenu.value.contains(event.target)) {
+    menuOpen.value = false
+  }
+}
+
+function onEscape(event) {
+  if (event.key === 'Escape') menuOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocPointerDown)
+  document.addEventListener('keydown', onEscape)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocPointerDown)
+  document.removeEventListener('keydown', onEscape)
+})
+
+// 화면을 옮기면 메뉴는 닫혀 있어야 한다
+watch(() => route.fullPath, () => (menuOpen.value = false))
+
+/**
+ * 지금 어느 메뉴에 있는지.
+ *
+ * router-link-active 를 쓰면 to="/" 가 모든 경로의 접두사라 보고서가 늘 켜져 보인다.
+ * 경로가 아니라 라우트 이름으로 묶어서 판단한다. 마이페이지처럼 어느 쪽도
+ * 아닌 화면에서는 둘 다 꺼둔다 — 있지도 않은 곳이 켜져 보이면 더 헷갈린다.
+ */
+const section = computed(() => {
+  const name = String(route.name ?? '')
+  if (name.startsWith('kanban')) return 'kanban'
+  if (name === 'reports' || name.startsWith('report-')) return 'reports'
+  return null
+})
 /** 로그인 화면에서는 헤더를 감춘다. 로그아웃 상태에서 보여줄 메뉴가 없다. */
 const showChrome = computed(() => auth.isLoggedIn && route.name !== 'login')
 
@@ -25,11 +82,14 @@ watch(
   async (loggedIn) => {
     if (!loggedIn) {
       kanban.reset()
+      inbox.reset()
+      socket.close()
       return
     }
     try {
       await auth.refreshMe()
-      await Promise.all([kanban.loadProjects(true), kanban.loadDueSoon()])
+      await Promise.all([kanban.loadProjects(true), kanban.loadDueSoon(), inbox.load()])
+      socket.connect()
     } catch {
       /* 알림은 부가 기능이다. 실패해도 화면이 막히면 안 된다 */
     }
@@ -56,12 +116,12 @@ function logout() {
       </RouterLink>
 
       <nav class="topnav">
-        <RouterLink to="/">보고서</RouterLink>
-        <RouterLink to="/kanban">칸반</RouterLink>
+        <RouterLink to="/" :class="{ 'topnav--on': section === 'reports' }">보고서</RouterLink>
+        <RouterLink to="/kanban" :class="{ 'topnav--on': section === 'kanban' }">칸반</RouterLink>
       </nav>
 
       <div class="topbar__right">
-        <DueSoonBell />
+        <NotificationBell />
         <button
           class="themebtn"
           type="button"
@@ -73,7 +133,7 @@ function logout() {
         </button>
         <RouterLink class="btn btn--primary btn--sm" to="/reports/new">새 주간보고</RouterLink>
 
-        <div class="user" @mouseleave="menuOpen = false">
+        <div ref="userMenu" class="user">
           <button
             class="user__btn"
             type="button"
@@ -81,18 +141,23 @@ function logout() {
             :aria-expanded="menuOpen"
             @click="menuOpen = !menuOpen"
           >
-            {{ (auth.user?.displayName || '?').slice(0, 1) }}
+            <UserAvatar :user="auth.user" :size="32" />
           </button>
 
           <div v-if="menuOpen" class="user__menu">
             <div class="user__head">
-              <strong>{{ auth.user?.displayName }}</strong>
-              <span class="tiny muted">
-                {{ auth.user?.username }}
-                <span v-if="auth.isAdmin" class="badge badge--ok">관리자</span>
+              <UserAvatar :user="auth.user" :size="36" />
+              <span class="user__who">
+                <strong>{{ auth.user?.displayName }}</strong>
+                <span class="tiny muted">
+                  {{ auth.user?.username }}
+                  <span v-if="auth.isAdmin" class="badge badge--ok">관리자</span>
+                </span>
               </span>
             </div>
-            <button class="user__item" type="button" @click="logout">로그아웃</button>
+            <button class="user__item user__item--out" type="button" @click="logout">
+              로그아웃
+            </button>
           </div>
         </div>
       </div>
@@ -183,7 +248,7 @@ function logout() {
   color: var(--text);
 }
 
-.topnav a.router-link-active {
+.topnav a.topnav--on {
   background: var(--brand-soft);
   color: var(--brand-strong);
 }
@@ -239,17 +304,15 @@ function logout() {
 .user__btn {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--line);
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: var(--brand-soft);
-  color: var(--brand-strong);
-  font-weight: 800;
+  background: transparent;
+  line-height: 0;
 }
 
 .user__btn:hover {
-  border-color: var(--brand-border);
+  box-shadow: 0 0 0 2px var(--brand-border);
 }
 
 .user__menu {
@@ -267,11 +330,18 @@ function logout() {
 
 .user__head {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 9px;
   padding: 9px 10px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
+}
+
+.user__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .user__item {
@@ -281,12 +351,16 @@ function logout() {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--danger);
   font-weight: 600;
   text-align: left;
+  text-decoration: none;
 }
 
-.user__item:hover {
+.user__item--out {
+  color: var(--danger);
+}
+
+.user__item--out:hover {
   background: var(--danger-soft);
 }
 

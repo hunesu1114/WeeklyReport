@@ -40,7 +40,7 @@ export function todayIso() {
   return `${d.getFullYear()}-${m}-${day}`
 }
 
-export function emptyCard(projectId, status = 'BACKLOG') {
+export function emptyCard(projectId, status = 'BACKLOG', assigneeId = null) {
   return {
     id: null,
     projectId,
@@ -50,6 +50,8 @@ export function emptyCard(projectId, status = 'BACKLOG') {
     priority: 'NORMAL',
     startDate: todayIso(),
     dueDate: null,
+    assigneeId,
+    version: null,
   }
 }
 
@@ -64,6 +66,10 @@ export function toForm(card) {
     priority: card.priority ?? 'NORMAL',
     startDate: card.startDate ?? '',
     dueDate: card.dueDate ?? '',
+    assigneeId: card.assignee?.id ?? null,
+    // 이 카드를 읽었을 때의 버전. 저장할 때 그대로 돌려보내
+    // 그 사이 남이 고쳤는지 서버가 판단하게 한다.
+    version: card.version ?? null,
   }
 }
 
@@ -77,5 +83,8 @@ export function toPayload(form) {
     priority: form.priority,
     startDate: form.startDate || null,
     dueDate: form.dueDate || null,
+    assigneeId: form.assigneeId ?? null,
+    // 새 카드에는 비교할 버전이 없다. 보내면 서버가 괜히 충돌로 본다.
+    version: form.id ? form.version ?? null : null,
   }
 }

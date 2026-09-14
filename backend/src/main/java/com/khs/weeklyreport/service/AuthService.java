@@ -1,8 +1,12 @@
 package com.khs.weeklyreport.service;
 
 import com.khs.weeklyreport.domain.AppUser;
+import com.khs.weeklyreport.domain.Project;
+import com.khs.weeklyreport.domain.ProjectMember;
+import com.khs.weeklyreport.domain.ProjectRole;
 import com.khs.weeklyreport.domain.UserRole;
 import com.khs.weeklyreport.repository.AppUserRepository;
+import com.khs.weeklyreport.repository.ProjectMemberRepository;
 import com.khs.weeklyreport.repository.ProjectRepository;
 import com.khs.weeklyreport.repository.ReportRepository;
 import com.khs.weeklyreport.security.CurrentUser;
@@ -14,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 public class AuthService {
 
@@ -22,6 +28,7 @@ public class AuthService {
     private final AppUserRepository userRepository;
     private final ReportRepository reportRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final CurrentUser currentUser;
@@ -29,12 +36,14 @@ public class AuthService {
     public AuthService(AppUserRepository userRepository,
                        ReportRepository reportRepository,
                        ProjectRepository projectRepository,
+                       ProjectMemberRepository memberRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        CurrentUser currentUser) {
         this.userRepository = userRepository;
         this.reportRepository = reportRepository;
         this.projectRepository = projectRepository;
+        this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.currentUser = currentUser;
@@ -117,6 +126,10 @@ public class AuthService {
      *
      * <p>여러 번 실행해도 안전하다. 두 번째부터는 옮길 것이 없어 0 건이 된다.
      * 칸반 카드는 프로젝트에 매달려 있어 프로젝트를 옮기면 함께 따라온다.
+     *
+     * <p>보드는 소유자가 아니라 <b>참여자 명단</b>으로 보인다. owner 만 바꾸고
+     * 명단에 넣지 않으면, 가져오기는 성공했는데 칸반 화면에는 아무것도 없는
+     * 상태가 된다. 그래서 명단 추가까지 한 트랜잭션에서 끝낸다.
      */
     @Transactional
     public AuthDtos.ClaimResult claimOrphans() {
@@ -125,18 +138,34 @@ public class AuthService {
             throw new AccessDeniedException(
                     "주인 없는 데이터는 가장 먼저 가입한 관리자 계정만 가져올 수 있습니다.");
         }
+        Long userId = user.getId();
+        String username = user.getUsername();
+
+        // 벌크 update 가 끝나면 '주인 없음' 조건에 걸리는 보드가 사라지므로 먼저 집어둔다
+        List<Long> orphanProjectIds = projectRepository.findOrphans().stream()
+                .map(Project::getId)
+                .toList();
 
         long cards = projectRepository.countOrphanCards();
         int reports = reportRepository.claimOrphans(user);
         int projects = projectRepository.claimOrphans(user);
 
+        // 벌크 update 가 영속성 컨텍스트를 비우므로 앞서 읽은 엔티티는 떨어져 나갔다
+        AppUser owner = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("계정을 찾을 수 없습니다. id=" + userId));
+        for (Long projectId : orphanProjectIds) {
+            if (memberRepository.existsByProjectIdAndUserId(projectId, userId)) continue;
+            projectRepository.findById(projectId).ifPresent(project ->
+                    memberRepository.save(ProjectMember.of(project, owner, ProjectRole.OWNER)));
+        }
+
         log.info("주인 없는 데이터 귀속: user={} reports={} projects={} cards={}",
-                user.getUsername(), reports, projects, cards);
+                username, reports, projects, cards);
 
         String message = (reports == 0 && projects == 0)
                 ? "가져올 데이터가 없습니다. 이미 모두 귀속되어 있습니다."
                 : "보고서 %d건, 프로젝트 %d개(카드 %d장)를 '%s' 계정으로 가져왔습니다."
-                        .formatted(reports, projects, cards, user.getUsername());
+                        .formatted(reports, projects, cards, username);
 
         return new AuthDtos.ClaimResult(reports, projects, cards, message);
     }

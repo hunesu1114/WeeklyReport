@@ -75,7 +75,13 @@ http.interceptors.response.use(
     if (data?.fields) {
       message += ' (' + Object.entries(data.fields).map(([k, v]) => `${k}: ${v}`).join(', ') + ')'
     }
-    return Promise.reject(new Error(message))
+
+    const wrapped = new Error(message)
+    wrapped.status = status
+    // 남이 먼저 고쳐서 거절당했다. 서버가 함께 준 '지금 값'을 잃지 않고 올려보낸다.
+    // 이게 있어야 화면이 내 것과 남의 것을 나란히 보여줄 수 있다.
+    if (status === 409 && data?.current) wrapped.conflict = data.current
+    return Promise.reject(wrapped)
   },
 )
 
@@ -154,14 +160,57 @@ export const kanbanApi = {
   moveCard: (id, payload) => http.put(`/kanban/cards/${id}/move`, payload).then((r) => r.data),
   removeCard: (id) => http.delete(`/kanban/cards/${id}`),
 
-  /** 완료일이 임박한 카드 (기본 3일) */
-  dueSoon: (days) => http.get('/kanban/cards/due-soon', { params: { days } }).then((r) => r.data),
+  /**
+   * 완료일이 임박한 카드 (기본 3일).
+   * scope='team' 이면 내가 속한 보드 전체, 아니면 내가 담당한 것만.
+   */
+  dueSoon: (days, scope) =>
+    http.get('/kanban/cards/due-soon', { params: { days, scope } }).then((r) => r.data),
 
   /** 시작일이 기간 안에 있는 카드 — 주간보고 연동 */
-  startedBetween: (from, to, projectId) =>
+  startedBetween: (from, to, projectId, mineOnly = true) =>
     http
-      .get('/kanban/cards/started-between', { params: { from, to, projectId } })
+      .get('/kanban/cards/started-between', { params: { from, to, projectId, mineOnly } })
       .then((r) => r.data),
+}
+
+/** 참여자 · 초대 · 알림 · 활동 기록. */
+export const teamApi = {
+  members: (projectId) => http.get(`/kanban/projects/${projectId}/members`).then((r) => r.data),
+  changeRole: (projectId, userId, role) =>
+    http.patch(`/kanban/projects/${projectId}/members/${userId}`, { role }).then((r) => r.data),
+  /** 본인이면 '나가기', 남이면 '내보내기'. 서버가 구분한다. */
+  removeMember: (projectId, userId) =>
+    http.delete(`/kanban/projects/${projectId}/members/${userId}`),
+
+  invite: (projectId, userId, role) =>
+    http.post(`/kanban/projects/${projectId}/invitations`, { userId, role }).then((r) => r.data),
+  pendingInvitations: (projectId) =>
+    http.get(`/kanban/projects/${projectId}/invitations`).then((r) => r.data),
+  cancelInvitation: (projectId, invitationId) =>
+    http.delete(`/kanban/projects/${projectId}/invitations/${invitationId}`),
+
+  myInvitations: () => http.get('/kanban/invitations').then((r) => r.data),
+  accept: (id) => http.post(`/kanban/invitations/${id}/accept`).then((r) => r.data),
+  decline: (id) => http.post(`/kanban/invitations/${id}/decline`),
+
+  searchUsers: (query, projectId) =>
+    http.get('/kanban/users/search', { params: { query, projectId } }).then((r) => r.data),
+
+  inbox: (limit) => http.get('/kanban/notifications', { params: { limit } }).then((r) => r.data),
+  markAllRead: () => http.post('/kanban/notifications/read-all'),
+  markRead: (id) => http.post(`/kanban/notifications/${id}/read`),
+
+  projectActivities: (projectId, page = 0, size = 30) =>
+    http
+      .get(`/kanban/projects/${projectId}/activities`, { params: { page, size } })
+      .then((r) => r.data),
+  cardActivities: (projectId, cardId, page = 0, size = 20) =>
+    http
+      .get(`/kanban/projects/${projectId}/cards/${cardId}/activities`, { params: { page, size } })
+      .then((r) => r.data),
+  myActivities: (page = 0, size = 30) =>
+    http.get('/kanban/activities', { params: { page, size } }).then((r) => r.data),
 }
 
 export const metaApi = {

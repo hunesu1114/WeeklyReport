@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { PRIORITY_META, dueLabel, dueTone } from '@/utils/kanban'
 
 const props = defineProps({
@@ -7,6 +8,8 @@ const props = defineProps({
   dragging: { type: Boolean, default: false },
   /** 여러 프로젝트를 섞어 보여줄 때만 프로젝트 이름을 띄운다 */
   showProject: { type: Boolean, default: false },
+  /** 읽기 전용 참여자에게는 끌 수 없게 한다 */
+  draggable: { type: Boolean, default: true },
 })
 const emit = defineEmits(['open', 'dragstart', 'dragend'])
 
@@ -28,8 +31,11 @@ function onDragStart(event) {
 <template>
   <article
     class="kcard"
-    :class="[`kcard--${priority.tone}`, { 'kcard--dragging': dragging, 'kcard--done': done }]"
-    draggable="true"
+    :class="[
+      `kcard--${priority.tone}`,
+      { 'kcard--dragging': dragging, 'kcard--done': done, 'kcard--static': !draggable },
+    ]"
+    :draggable="draggable"
     tabindex="0"
     role="button"
     @dragstart="onDragStart"
@@ -41,6 +47,13 @@ function onDragStart(event) {
     <div class="kcard__top">
       <span :class="priorityBadge">{{ priority.label }}</span>
       <span v-if="showProject" class="kcard__project tiny muted">{{ card.projectName }}</span>
+      <UserAvatar
+        v-if="card.assignee"
+        class="kcard__who"
+        :user="card.assignee"
+        :size="20"
+        :title="`담당 ${card.assignee.displayName}`"
+      />
     </div>
 
     <h4 class="kcard__title">{{ card.title }}</h4>
@@ -92,6 +105,10 @@ function onDragStart(event) {
   border-style: dashed;
 }
 
+.kcard--static {
+  cursor: pointer;
+}
+
 /* 중요도를 왼쪽 띠로 표시한다. 목록을 훑을 때 색만 보고 걸러진다. */
 .kcard--neutral {
   border-left-color: var(--line-strong);
@@ -120,9 +137,17 @@ function onDragStart(event) {
 }
 
 .kcard__project {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: right;
+}
+
+/* 담당자는 맨 오른쪽에 붙는다. 여러 장을 훑을 때 한 줄로 읽힌다 */
+.kcard__who {
+  margin-left: auto;
 }
 
 .kcard__title {

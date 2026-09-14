@@ -26,6 +26,11 @@ public class KanbanCard {
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;
 
+    /** 이 일을 맡은 사람. 비어 있으면 담당 없음. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id")
+    private AppUser assignee;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private KanbanStatus status = KanbanStatus.BACKLOG;
@@ -54,6 +59,14 @@ public class KanbanCard {
     /** 같은 칸 안에서의 표시 순서(0-based). */
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
+
+    /**
+     * 두 사람이 같은 카드를 열어 저장했을 때 뒤가 조용히 이기는 것을 막는다.
+     * 저장 요청이 들고 온 값과 다르면 409 로 돌려보낸다.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

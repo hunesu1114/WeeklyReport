@@ -67,6 +67,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/setup-state")
                         .permitAll()
 
+                        // WebSocket 핸드셰이크. 누구인지는 연결 직후 첫 메시지로 확인하고,
+                        // 인증에 실패하거나 시간을 넘기면 핸들러가 연결을 끊는다.
+                        .requestMatchers("/ws/**").permitAll()
+
                         .requestMatchers("/api/**").authenticated()
 
                         // SPA 정적 파일은 앞단 nginx 가 준다. 여기까지 오는 것은 없다.

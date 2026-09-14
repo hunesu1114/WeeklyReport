@@ -7,6 +7,8 @@ const props = defineProps({
   status: { type: String, required: true },
   cards: { type: Array, default: () => [] },
   draggingId: { type: [Number, null], default: null },
+  /** 읽기 전용으로 참여 중이면 옮기지도 추가하지도 못한다 */
+  readOnly: { type: Boolean, default: false },
 })
 const emit = defineEmits(['open', 'add', 'dragstart', 'dragend', 'drop'])
 
@@ -32,6 +34,10 @@ function indexFromPointer(event) {
 }
 
 function onDragOver(event) {
+  if (props.readOnly) {
+    event.dataTransfer.dropEffect = 'none'
+    return
+  }
   event.dataTransfer.dropEffect = 'move'
   dropIndex.value = indexFromPointer(event)
 }
@@ -44,6 +50,7 @@ function onDragLeave(event) {
 }
 
 function onDrop(event) {
+  if (props.readOnly) return
   const index = dropIndex.value ?? indexFromPointer(event)
   dropIndex.value = null
   const cardId = Number(event.dataTransfer.getData('text/plain'))
@@ -72,7 +79,13 @@ function onDragEnd() {
         <strong>{{ meta.label }}</strong>
         <span class="col__count">{{ cards.length }}</span>
       </div>
-      <button class="btn btn--ghost btn--icon" type="button" :title="`${meta.label} 에 카드 추가`" @click="emit('add', status)">
+      <button
+        v-if="!readOnly"
+        class="btn btn--ghost btn--icon"
+        type="button"
+        :title="`${meta.label} 에 카드 추가`"
+        @click="emit('add', status)"
+      >
         ＋
       </button>
     </header>
@@ -86,6 +99,7 @@ function onDragEnd() {
           <KanbanCardItem
             :card="card"
             :dragging="draggingId === card.id"
+            :draggable="!readOnly"
             @open="emit('open', $event)"
             @dragstart="emit('dragstart', $event)"
             @dragend="onDragEnd"

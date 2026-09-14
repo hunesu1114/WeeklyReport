@@ -8,62 +8,111 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface KanbanCardRepository extends JpaRepository<KanbanCard, Long> {
 
-    /** 보드 조회. 프로젝트 소유권은 서비스에서 먼저 확인한다. */
-    List<KanbanCard> findByProjectIdOrderByStatusAscSortOrderAscIdAsc(Long projectId);
+    /** 보드 조회. 담당자를 같이 읽어 카드마다 따로 읽지 않게 한다. */
+    @Query("""
+            select c from KanbanCard c
+            left join fetch c.assignee
+            where c.project.id = :projectId
+            order by c.status asc, c.sortOrder asc, c.id asc
+            """)
+    List<KanbanCard> findBoard(@Param("projectId") Long projectId);
+
+    @Query("""
+            select c from KanbanCard c
+            join fetch c.project
+            left join fetch c.assignee
+            where c.id = :id
+            """)
+    Optional<KanbanCard> findWithProject(@Param("id") Long id);
+
+    /** 순서를 다시 매길 때만 쓴다. 보드 잠금 안에서 호출된다. */
+    List<KanbanCard> findByProjectIdAndStatusOrderBySortOrderAscIdAsc(Long projectId, KanbanStatus status);
 
     /**
-     * 완료일이 임박한 카드. DONE 은 제외하고, 이미 지난 것도 함께 준다.
+     * 완료일이 임박한 내 담당 카드. DONE 은 빼고 이미 지난 것도 함께 준다.
      * 놓친 일이 목록에서 조용히 빠지면 알림의 의미가 없다.
-     *
-     * <p>정렬은 완료일까지만 하고 중요도는 서비스에서 정렬한다.
-     * 중요도는 문자열로 저장되어 있어 DB 정렬은 알파벳순(HIGH, LOW, NORMAL, URGENT)이 된다.
      */
     @Query("""
             select c from KanbanCard c
             join fetch c.project p
-            where p.owner.id = :ownerId
+            left join fetch c.assignee
+            where c.assignee.id = :userId
               and c.dueDate is not null
               and c.status <> com.khs.weeklyreport.domain.KanbanStatus.DONE
               and c.dueDate <= :until
             order by c.dueDate asc, c.id asc
             """)
-    List<KanbanCard> findDueUntil(@Param("until") LocalDate until, @Param("ownerId") Long ownerId);
+    List<KanbanCard> findDueForAssignee(@Param("until") LocalDate until, @Param("userId") Long userId);
 
-    /**
-     * 시작일이 주어진 기간 안에 있는 카드. 주간보고의 '금주 기간' 연동에 쓴다.
-     *
-     * <p>프로젝트 필터가 필요할 때를 위해 메서드를 따로 둔다. 하나의 쿼리에서
-     * {@code :projectId is null} 로 분기하면 PostgreSQL 이 null 파라미터의 타입을
-     * 추론하지 못해 실패한다.
-     */
+    /** 내가 속한 보드 전체의 임박 카드. 담당자 없는 것도 포함한다. */
     @Query("""
             select c from KanbanCard c
             join fetch c.project p
-            where p.owner.id = :ownerId
-              and c.startDate is not null
-              and c.startDate between :from and :to
+            left join fetch c.assignee
+            where c.dueDate is not null
+              and c.status <> com.khs.weeklyreport.domain.KanbanStatus.DONE
+              and c.dueDate <= :until
+              and exists (select 1 from ProjectMember m
+                          where m.project = p and m.user.id = :userId)
+            order by c.dueDate asc, c.id asc
+            """)
+    List<KanbanCard> findDueInMyProjects(@Param("until") LocalDate until, @Param("userId") Long userId);
+
+    /** 담당자가 없는 임박 카드. 보드 상단 안내에 쓴다. */
+    @Query("""
+            select count(c) from KanbanCard c
+            where c.project.id = :projectId
+              and c.assignee is null
+              and c.dueDate is not null
+              and c.status <> com.khs.weeklyreport.domain.KanbanStatus.DONE
+              and c.dueDate <= :until
+            """)
+    long countUnassignedDue(@Param("projectId") Long projectId, @Param("until") LocalDate until);
+
+    // ── 주간보고 연동 ────────────────────────────────────────
+    // 프로젝트/담당자 필터 조합마다 메서드를 나눈다. 한 쿼리에서 :param is null 로
+    // 분기하면 PostgreSQL 이 null 파라미터의 타입을 추론하지 못해 실패한다.
+
+    @Query("""
+            select c from KanbanCard c
+            join fetch c.project p
+            left join fetch c.assignee
+            where c.startDate between :from and :to
+              and c.assignee.id = :userId
             order by p.sortOrder asc, p.name asc, c.startDate asc, c.id asc
             """)
-    List<KanbanCard> findStartedBetween(@Param("from") LocalDate from,
-                                        @Param("to") LocalDate to,
-                                        @Param("ownerId") Long ownerId);
+    List<KanbanCard> findStartedByAssignee(@Param("from") LocalDate from,
+                                           @Param("to") LocalDate to,
+                                           @Param("userId") Long userId);
 
     @Query("""
             select c from KanbanCard c
             join fetch c.project p
-            where p.owner.id = :ownerId
-              and c.startDate is not null
-              and c.startDate between :from and :to
+            left join fetch c.assignee
+            where c.startDate between :from and :to
+              and exists (select 1 from ProjectMember m
+                          where m.project = p and m.user.id = :userId)
+            order by p.sortOrder asc, p.name asc, c.startDate asc, c.id asc
+            """)
+    List<KanbanCard> findStartedInMyProjects(@Param("from") LocalDate from,
+                                             @Param("to") LocalDate to,
+                                             @Param("userId") Long userId);
+
+    @Query("""
+            select c from KanbanCard c
+            join fetch c.project p
+            left join fetch c.assignee
+            where c.startDate between :from and :to
               and p.id = :projectId
             order by c.startDate asc, c.id asc
             """)
-    List<KanbanCard> findStartedBetweenInProject(@Param("from") LocalDate from,
-                                                 @Param("to") LocalDate to,
-                                                 @Param("projectId") Long projectId,
-                                                 @Param("ownerId") Long ownerId);
+    List<KanbanCard> findStartedInProject(@Param("from") LocalDate from,
+                                          @Param("to") LocalDate to,
+                                          @Param("projectId") Long projectId);
 
     /** 같은 칸의 마지막 순번. 새 카드는 맨 아래에 붙인다. */
     @Query("""
@@ -71,4 +120,19 @@ public interface KanbanCardRepository extends JpaRepository<KanbanCard, Long> {
             where c.project.id = :projectId and c.status = :status
             """)
     int findMaxSortOrder(@Param("projectId") Long projectId, @Param("status") KanbanStatus status);
+
+    // ── 보드 목록의 집계 ─────────────────────────────────────
+    // 프로젝트마다 카드를 전건 읽어 세던 것을 집계 쿼리로 바꾼다.
+
+    @Query("""
+            select c.project.id, count(c),
+                   sum(case when c.status <> com.khs.weeklyreport.domain.KanbanStatus.DONE then 1 else 0 end),
+                   sum(case when c.dueDate is not null
+                             and c.status <> com.khs.weeklyreport.domain.KanbanStatus.DONE
+                             and c.dueDate <= :until then 1 else 0 end)
+            from KanbanCard c
+            where c.project.id in :projectIds
+            group by c.project.id
+            """)
+    List<Object[]> summarize(@Param("projectIds") List<Long> projectIds, @Param("until") LocalDate until);
 }

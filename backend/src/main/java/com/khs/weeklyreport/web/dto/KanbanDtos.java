@@ -4,6 +4,7 @@ import com.khs.weeklyreport.domain.CardPriority;
 import com.khs.weeklyreport.domain.KanbanCard;
 import com.khs.weeklyreport.domain.KanbanStatus;
 import com.khs.weeklyreport.domain.Project;
+import com.khs.weeklyreport.domain.ProjectRole;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -39,12 +40,15 @@ public final class KanbanDtos {
             long cardCount,
             long openCount,
             long dueSoonCount,
+            /** 이 보드에서 내 역할. 화면이 버튼을 감출지 판단한다. */
+            ProjectRole myRole,
             Instant updatedAt
     ) {
-        public static ProjectView of(Project project, long cardCount, long openCount, long dueSoonCount) {
+        public static ProjectView of(Project project, long cardCount, long openCount,
+                                     long dueSoonCount, ProjectRole myRole) {
             return new ProjectView(project.getId(), project.getName(), project.getDescription(),
                     project.getColor(), project.isActive(), project.getSortOrder(),
-                    cardCount, openCount, dueSoonCount, project.getUpdatedAt());
+                    cardCount, openCount, dueSoonCount, myRole, project.getUpdatedAt());
         }
     }
 
@@ -57,7 +61,14 @@ public final class KanbanDtos {
             String content,
             CardPriority priority,
             LocalDate startDate,
-            LocalDate dueDate
+            LocalDate dueDate,
+            /** 담당자. 비우면 담당 없음. 그 보드의 참여자여야 한다. */
+            Long assigneeId,
+            /**
+             * 화면이 이 카드를 읽었을 때의 버전. 그 사이 남이 고쳤으면 409 로 돌려보낸다.
+             * 새 카드이거나 충돌 검사가 필요 없으면 비워 보낸다.
+             */
+            Long version
     ) {
     }
 
@@ -73,9 +84,10 @@ public final class KanbanDtos {
             LocalDate startDate,
             LocalDate dueDate,
             int sortOrder,
+            TeamDtos.UserBrief assignee,
+            long version,
             /** 완료일까지 남은 날. 없으면 null, 음수면 이미 지났다. */
             Long daysUntilDue,
-            /** DONE 이 아니고 완료일이 임박(기본 3일 이내)했는지 */
             boolean dueSoon,
             Instant updatedAt
     ) {
@@ -93,6 +105,8 @@ public final class KanbanDtos {
                     card.getStartDate(),
                     card.getDueDate(),
                     card.getSortOrder(),
+                    TeamDtos.UserBrief.of(card.getAssignee()),
+                    card.getVersion(),
                     card.daysUntilDue(today),
                     card.isDueSoon(today, dueSoonDays),
                     card.getUpdatedAt());
@@ -110,7 +124,19 @@ public final class KanbanDtos {
     /** 보드 한 판. 칸 이름 -> 그 칸의 카드들. */
     public record BoardView(
             ProjectView project,
-            Map<KanbanStatus, List<CardView>> columns
+            Map<KanbanStatus, List<CardView>> columns,
+            /**
+             * 담당자 없이 완료일이 임박한 카드 수.
+             * 아무도 책임지지 않는 일이 조용히 지나가지 않도록 보드 위에 띄운다.
+             */
+            long unassignedDueCount
+    ) {
+    }
+
+    /** 저장 충돌(409) 응답. 서버의 현재 값을 함께 준다. */
+    public record ConflictView(
+            String message,
+            CardView current
     ) {
     }
 }
