@@ -4,6 +4,7 @@ import ReportEditorView from '@/views/ReportEditorView.vue'
 import KanbanView from '@/views/KanbanView.vue'
 import LoginView from '@/views/LoginView.vue'
 import MyPageView from '@/views/MyPageView.vue'
+import MemoView from '@/views/MemoView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 /** 브라우저 탭에 항상 붙는 앱 이름. */
@@ -28,6 +29,8 @@ const router = createRouter({
       props: true,
       meta: { title: '주간보고 수정' },
     },
+
+    { path: '/memos', name: 'memos', component: MemoView, meta: { title: '메모' } },
 
     { path: '/me', name: 'my-page', component: MyPageView, meta: { title: '마이페이지' } },
 

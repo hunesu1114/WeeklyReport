@@ -9,6 +9,7 @@ import { useTheme } from '@/composables/useTheme'
 import { useKanbanSocket } from '@/composables/useKanbanSocket'
 import { useKanbanStore } from '@/stores/kanban'
 import { useNotificationStore } from '@/stores/notifications'
+import { useMemoStore } from '@/stores/memo'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -17,6 +18,7 @@ const { toasts, dismiss } = useToast()
 const { isDark, toggle } = useTheme()
 const kanban = useKanbanStore()
 const inbox = useNotificationStore()
+const memo = useMemoStore()
 const auth = useAuthStore()
 
 /**
@@ -76,6 +78,7 @@ watch(() => route.fullPath, () => (menuOpen.value = false))
 const section = computed(() => {
   const name = String(route.name ?? '')
   if (name.startsWith('kanban')) return 'kanban'
+  if (name === 'memos') return 'memos'
   if (name === 'reports' || name.startsWith('report-')) return 'reports'
   return null
 })
@@ -89,6 +92,7 @@ watch(
     if (!loggedIn) {
       kanban.reset()
       inbox.reset()
+      memo.reset()
       socket.close()
       return
     }
@@ -124,6 +128,7 @@ function logout() {
       <nav class="topnav">
         <RouterLink to="/" :class="{ 'topnav--on': section === 'reports' }">보고서</RouterLink>
         <RouterLink to="/kanban" :class="{ 'topnav--on': section === 'kanban' }">칸반</RouterLink>
+        <RouterLink to="/memos" :class="{ 'topnav--on': section === 'memos' }">메모</RouterLink>
       </nav>
 
       <div class="topbar__right">

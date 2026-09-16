@@ -224,6 +224,33 @@ export const teamApi = {
     http.get('/kanban/activities', { params: { page, size } }).then((r) => r.data),
 }
 
+/** 메모장. 개인 것이라 별도의 권한 개념이 없다. */
+export const memoApi = {
+  /** 폴더 트리와 메모 목록을 한 번에 */
+  workspace: () => http.get('/memos').then((r) => r.data),
+
+  get: (id) => http.get(`/memos/${id}`).then((r) => r.data),
+  create: (payload) => http.post('/memos', payload).then((r) => r.data),
+  update: (id, payload) => http.put(`/memos/${id}`, payload).then((r) => r.data),
+  move: (id, folderId) => http.put(`/memos/${id}/move`, { folderId }).then((r) => r.data),
+  remove: (id) => http.delete(`/memos/${id}`),
+
+  createFolder: (name, parentId) =>
+    http.post('/memos/folders', { name, parentId }).then((r) => r.data),
+  renameFolder: (id, name) => http.put(`/memos/folders/${id}`, { name }).then((r) => r.data),
+  moveFolder: (id, parentId) =>
+    http.put(`/memos/folders/${id}/move`, { parentId }).then((r) => r.data),
+  removeFolder: (id) => http.delete(`/memos/folders/${id}`),
+
+  /** txt 로 내려받는다. 줄 끝은 서버가 CRLF 로 바꿔 보낸다. */
+  async exportText(id) {
+    const response = await http.get(`/memos/${id}/export`, { responseType: 'blob' })
+    const filename = parseFilename(response.headers['content-disposition']) || `memo-${id}.txt`
+    saveBlob(response.data, filename)
+    return filename
+  },
+}
+
 export const metaApi = {
   templates: () => http.get('/meta/templates').then((r) => r.data),
   statuses: () => http.get('/meta/statuses').then((r) => r.data),
