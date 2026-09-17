@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   TAB,
   caretPosition,
@@ -49,6 +49,16 @@ export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
       area.selectionStart = area.selectionEnd = s + text.length
       area.dispatchEvent(new Event('input', { bubbles: true }))
     }
+    /*
+     * 기본 동작을 막고 우리가 직접 넣었기 때문에, 브라우저가 알아서 해주던
+     * "커서 따라 굴리기"도 함께 사라졌다. 엔터로 새 줄을 만들면 그 줄이
+     * 화면 밖에 생겨 무엇을 치는지 보이지 않는다.
+     *
+     * requestAnimationFrame 으로 미루지 않는다. 화면이 그려지지 않는 동안에는
+     * 콜백이 아예 오지 않아서, 탭이 뒤에 있거나 창이 가려져 있으면 스크롤이
+     * 통째로 빠진다. 대신 scrollCaretIntoView 안에서 배치를 강제로 확정시킨다.
+     */
+    scrollCaretIntoView()
     sync()
   }
 
@@ -71,18 +81,72 @@ export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
   }
 
   /**
+   * 커서가 세로로 어디에 있는지(px) 재는 거울 요소.
+   *
+   * 줄 수 × 줄 높이로 어림잡으면 자동 줄 바꿈에서 어긋난다 — 접혀서 세 줄을
+   * 차지하는 문단도 \n 기준으로는 한 줄이기 때문이다. textarea 와 같은 글꼴·너비·
+   * 여백을 가진 요소에 커서 앞까지의 글을 넣고 표식의 위치를 읽는다.
+   */
+  let mirror = null
+
+  const MIRRORED = [
+    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight',
+    'textIndent', 'textTransform', 'tabSize', 'boxSizing', 'overflowWrap', 'wordBreak',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+  ]
+
+  function caretTop(area) {
+    if (!mirror) {
+      mirror = document.createElement('div')
+      mirror.setAttribute('aria-hidden', 'true')
+      mirror.style.position = 'absolute'
+      mirror.style.top = '0'
+      mirror.style.left = '-9999px'
+      mirror.style.visibility = 'hidden'
+      document.body.appendChild(mirror)
+    }
+
+    const computed = getComputedStyle(area)
+    for (const prop of MIRRORED) mirror.style[prop] = computed[prop]
+    mirror.style.width = `${area.clientWidth}px`
+    mirror.style.whiteSpace = area.wrap === 'off' ? 'pre' : 'pre-wrap'
+
+    mirror.textContent = area.value.slice(0, area.selectionStart)
+    const marker = document.createElement('span')
+    // 줄 끝에 커서가 있을 때도 높이를 갖도록 폭 없는 공백을 둔다
+    marker.textContent = '​'
+    mirror.appendChild(marker)
+
+    return marker.offsetTop
+  }
+
+  /**
    * 커서가 화면 밖으로 나가면 따라간다.
-   * 줄 높이로 어림잡아 굴린다 — 정확한 좌표를 얻으려면 거울 요소가 필요한데,
-   * 찾기와 줄 이동에는 이 정도로 충분하다.
+   *
+   * 아래로 붙일 때는 본문 아래 여백만큼 더 굴린다. 그러지 않으면 새로 만든 줄이
+   * 화면 맨 아래 선에 딱 붙어, 글을 치고 있는데도 잘린 것처럼 보인다.
    */
   function scrollCaretIntoView() {
     const area = el()
     if (!area) return
-    const before = area.value.slice(0, area.selectionStart)
-    const lineHeight = parseFloat(getComputedStyle(area).lineHeight) || 20
-    const top = (before.split('\n').length - 1) * lineHeight
-    if (top < area.scrollTop || top > area.scrollTop + area.clientHeight - lineHeight * 2) {
-      area.scrollTop = Math.max(0, top - area.clientHeight / 2)
+
+    /*
+     * 방금 넣은 글자를 배치에 반영시킨다. scrollHeight 를 읽으면 브라우저가
+     * 미뤄둔 계산을 그 자리에서 끝낸다. 이걸 건너뛰면 아직 늘어나기 전의
+     * 한계선에 scrollTop 이 잘려, 새로 만든 줄만큼 모자란 채로 멈춘다.
+     */
+    void area.scrollHeight
+
+    const computed = getComputedStyle(area)
+    const lineHeight = parseFloat(computed.lineHeight) || 20
+    const padBottom = parseFloat(computed.paddingBottom) || 0
+    const top = caretTop(area)
+
+    if (top < area.scrollTop) {
+      area.scrollTop = Math.max(0, top - lineHeight)
+    } else if (top + lineHeight + padBottom > area.scrollTop + area.clientHeight) {
+      area.scrollTop = top + lineHeight + padBottom - area.clientHeight
     }
   }
 
@@ -296,6 +360,11 @@ export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
     onCopy(event)
     deleteLine()
   }
+
+  onBeforeUnmount(() => {
+    mirror?.remove()
+    mirror = null
+  })
 
   const status = computed(() => ({
     line: caret.value.line,
