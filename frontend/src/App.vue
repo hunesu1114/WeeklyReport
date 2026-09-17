@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import BrandMark from '@/components/BrandMark.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
+import SessionBanner from '@/components/SessionBanner.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
@@ -176,6 +177,8 @@ function logout() {
         </div>
       </div>
     </header>
+
+    <SessionBanner v-if="showChrome" />
 
     <main class="content" :class="{ 'content--bare': !showChrome }">
       <RouterView />

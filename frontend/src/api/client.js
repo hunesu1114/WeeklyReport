@@ -90,6 +90,8 @@ export const authApi = {
   register: (payload) => http.post('/auth/register', payload).then((r) => r.data),
   login: (payload) => http.post('/auth/login', payload).then((r) => r.data),
   me: () => http.get('/auth/me').then((r) => r.data),
+  /** 세션 연장. 아직 살아 있는 토큰으로만 통한다. */
+  refresh: () => http.post('/auth/refresh').then((r) => r.data),
   changePassword: (payload) => http.post('/auth/password', payload),
 
   /** 주인 없는 데이터 현황 */

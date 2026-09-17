@@ -93,6 +93,24 @@ public class AuthService {
         return token(user);
     }
 
+    /**
+     * 토큰을 새로 끊어 세션을 연장한다.
+     *
+     * <p>필터를 통과했다는 것은 아직 살아 있는 토큰이라는 뜻이므로, 여기서는
+     * 계정이 여전히 쓸 수 있는지만 본다.
+     *
+     * <p>이건 <b>사람이 버튼을 눌러야</b> 도는 길이다. 자동으로 갱신하면 열어만 둔
+     * 탭이 영원히 로그인 상태로 남는다. 자리를 비운 세션은 그대로 만료되어야 한다.
+     */
+    @Transactional(readOnly = true)
+    public AuthDtos.TokenResponse refresh() {
+        AppUser user = currentUser.requireEntity();
+        if (!user.isEnabled()) {
+            throw new IllegalArgumentException("사용할 수 없는 계정입니다. 관리자에게 문의하세요.");
+        }
+        return token(user);
+    }
+
     @Transactional(readOnly = true)
     public AuthDtos.UserView me() {
         return AuthDtos.UserView.of(currentUser.requireEntity());

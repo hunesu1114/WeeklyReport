@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { authApi, setAuthToken } from '@/api/client'
+import { expiresAt as tokenExpiresAt } from '@/utils/jwt'
 
 const TOKEN_KEY = 'weekly-report:token'
 const USER_KEY = 'weekly-report:user'
@@ -28,6 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(readStored(USER_KEY))
 
   const isLoggedIn = computed(() => Boolean(token.value))
+  /** 이 세션이 끝나는 시각(ms). 알 수 없으면 null. */
+  const expiresAt = computed(() => (token.value ? tokenExpiresAt(token.value) : null))
   const isAdmin = computed(() => user.value?.role === 'ADMIN')
 
   // 새로고침 직후에도 요청에 토큰이 실리도록 즉시 반영한다
@@ -60,6 +63,17 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value
   }
 
+  /**
+   * 세션을 연장한다. 서버가 토큰을 새로 끊어 준다.
+   *
+   * 자동으로 부르지 않는다. 열어만 둔 탭이 영원히 로그인 상태로 남으면
+   * 만료 시간을 두는 의미가 없다. 사람이 버튼을 눌렀을 때만 연장한다.
+   */
+  async function extend() {
+    apply(await authApi.refresh())
+    return expiresAt.value
+  }
+
   function logout() {
     token.value = null
     user.value = null
@@ -82,5 +96,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, isLoggedIn, isAdmin, applyUser, login, register, logout, refreshMe }
+  return {
+    token,
+    user,
+    isLoggedIn,
+    isAdmin,
+    expiresAt,
+    applyUser,
+    extend,
+    login,
+    register,
+    logout,
+    refreshMe,
+  }
 })

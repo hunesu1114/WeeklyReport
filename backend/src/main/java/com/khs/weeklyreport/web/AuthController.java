@@ -33,6 +33,12 @@ public class AuthController {
         return authService.login(request);
     }
 
+    /** 세션 연장. 아직 살아 있는 토큰으로만 부를 수 있다. */
+    @PostMapping("/refresh")
+    public AuthDtos.TokenResponse refresh() {
+        return authService.refresh();
+    }
+
     @GetMapping("/me")
     public AuthDtos.UserView me() {
         return authService.me();
