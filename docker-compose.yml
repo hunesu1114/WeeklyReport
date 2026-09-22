@@ -10,7 +10,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-weekly}
       TZ: Asia/Seoul
     ports:
-      - "${DB_PORT:-5434}:5432"
+      # 내 PC 에서만 붙는다. 접두사를 빼면 같은 공유기에 있는 아무 기기나
+      # 개발 DB 에 닿는데, 계정은 weekly/weekly 로 공개되어 있다.
+      # 도커가 넣는 iptables 규칙은 방화벽 체인보다 앞이라 막아도 새어 나간다.
+      - "127.0.0.1:${DB_PORT:-5434}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:

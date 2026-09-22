@@ -11,7 +11,8 @@ master push
 ```
 
 서버에서는 앞단 [edge](https://github.com/hunesu1114/EdgeProxy) 프록시가 TLS 를 끝내고
-도메인을 보고 이 앱으로 넘긴다. 이 앱 컨테이너는 **호스트 포트를 열지 않는다.**
+도메인을 보고 이 앱으로 넘긴다. 이 앱 컨테이너는 **공개 포트를 열지 않는다.**
+예외는 postgres 하나이고, 그것도 서버 루프백 전용이다 (아래 "운영 DB 조회").
 
 ```
 인터넷 :443
@@ -22,7 +23,7 @@ weekly-report-web              정적 파일 + /api 프록시
    │
 weekly-report-backend          Spring Boot
    │
-weekly-report-postgres
+weekly-report-postgres         127.0.0.1:15434 (루프백 전용 · 조회용)
 ```
 
 ---
@@ -167,13 +168,16 @@ chmod 600 .env.secrets && cat .env.secrets
 |---|---|
 | `DOCKERHUB_USERNAME` | Docker Hub 계정 |
 | `DOCKERHUB_TOKEN` | Docker Hub Access Token (비밀번호 아님) |
-| `SERVER_HOST` | `119.67.28.20` |
+| `SERVER_HOST` | 서버 주소 |
 | `SERVER_USER` | SSH 사용자 |
 | `SERVER_SSH_KEY` | SSH 개인키 전문 |
 | `SERVER_PORT` | SSH 포트 (22 면 생략 가능) |
 
 edge · SecretManager 저장소에 등록한 것과 같은 값이다.
 **Secret 은 저장소마다 따로다.** 다른 저장소에 넣은 값은 넘어오지 않는다.
+
+> 서버 주소와 SSH 포트의 실제 값은 **이 문서에 적지 않는다.** Secrets 로 관리하는
+> 값을 문서에 박아두면 그 방침이 무의미해진다. 모르면 서버를 함께 쓰는 사람에게 묻는다.
 
 Docker Hub 토큰은 Docker Hub → Account Settings → Personal access tokens 에서
 `Read & Write` 권한으로 만든다.
@@ -223,6 +227,46 @@ cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.
 
 ---
 
+## 운영 DB 조회
+
+postgres 는 **서버 루프백에만** 게시되어 있다 — `127.0.0.1:15434`.
+서버에 들어온 사람만 닿고, 밖에서는 SSH 터널을 거쳐야 한다.
+컨테이너를 다시 만들어도, 네트워크를 다시 만들어도 이 주소는 그대로다.
+
+### DataGrip
+
+1. **New → Data Source → PostgreSQL**
+2. **SSH/SSL** 탭 → `Use SSH tunnel` 체크 → 서버 주소 · SSH 포트 · 계정 · 개인키 등록
+3. **General** 탭
+   - Host `127.0.0.1`
+   - Port `15434`
+   - Database `weekly_report`
+   - User `weekly`
+   - Password — 서버의 `~/weekly-report/.env.secrets` 의 `POSTGRES_PASSWORD`
+4. **Options → Read-only 를 켠다**
+
+세 가지를 빠뜨리면 안 된다.
+
+- **Host 는 SSH 서버 기준으로 해석된다.** 내 PC 의 루프백이 아니라 서버의 루프백이다.
+  터널이 뚫린 뒤 그 안에서 `127.0.0.1:15434` 로 붙는다.
+- **개발 DB 와 데이터 소스 이름을 구분한다.** 개발용 compose 의 DB 도 `127.0.0.1` 로
+  보이니 `weeklyReport (prod)` 처럼 적어둔다. 섞이면 운영 DB 에 개발용 쿼리를 던진다.
+- **Read-only 를 켠다.** DataGrip 은 스키마 인트로스펙션을 자동으로 돌리고,
+  실수로 실행한 UPDATE 를 되돌려주지 않는다.
+
+비밀번호는 **서버의 `.env.secrets` 가 원본이다.** 이 파일은 CI 가 만들지 않고 서버에
+한 번 두고 그대로 두는 것이라(위 "최초 설정" 3번), 로컬에 사본을 두면 엇갈린다.
+
+### 터널 없이 — 서버에서 직접
+
+```bash
+docker exec -it weekly-report-postgres psql -U weekly -d weekly_report
+```
+
+이 경로는 호스트 포트를 거치지 않는다. 포트가 막혀 있어도 된다.
+
+---
+
 ## 문제가 생겼을 때
 
 | 증상 | 확인 |
@@ -236,6 +280,18 @@ cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.
 | 재배포·재시작할 때마다 로그아웃됨 | `.env.secrets` 에 `APP_JWT_SECRET` 이 없다. 위 3번 참고 |
 | API 가 전부 401 | 토큰이 만료됐거나 없다. 화면이 로그인으로 돌려보낸다 |
 | 엉뚱한 사이트가 뜬다 | 해당 도메인의 server 블록이 없어 edge 기본 서버로 갔다 |
+| DataGrip 이 `connection refused` | 터널은 붙었는데 포트가 없다. 아래 확인 |
+| DataGrip 이 인증 실패 | 서버 `.env.secrets` 의 `POSTGRES_PASSWORD` 와 다르다 |
+
+`connection refused` 면 서버에서 포트가 실제로 떠 있는지 본다.
+`127.0.0.1:15434` 가 보여야 한다. `0.0.0.0` 이면 잘못된 것이니 즉시 고친다.
+
+```bash
+ss -ltnp | grep 15434
+```
+
+오래된 배포가 서버에 남아 있으면 포트가 없다. 이 게시는 compose 파일에 있고
+CI 가 배포마다 덮어쓰므로, 한 번은 재배포해야 반영된다.
 
 ```bash
 cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.secrets --env-file .env.deploy logs -f backend
