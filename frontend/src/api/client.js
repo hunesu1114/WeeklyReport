@@ -237,6 +237,10 @@ export const memoApi = {
   move: (id, folderId) => http.put(`/memos/${id}/move`, { folderId }).then((r) => r.data),
   remove: (id) => http.delete(`/memos/${id}`),
 
+  /* 깃발은 본문 저장과 따로 보낸다. 자동 저장이 끼어들어 방금 누른 것을 되돌리지 않게. */
+  setPinned: (id, value) => http.put(`/memos/${id}/pin`, { value }).then((r) => r.data),
+  setFavorite: (id, value) => http.put(`/memos/${id}/favorite`, { value }).then((r) => r.data),
+
   createFolder: (name, parentId) =>
     http.post('/memos/folders', { name, parentId }).then((r) => r.data),
   renameFolder: (id, name) => http.put(`/memos/folders/${id}`, { name }).then((r) => r.data),

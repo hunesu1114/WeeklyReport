@@ -133,6 +133,30 @@ public class MemoService {
         return MemoDtos.MemoView.of(memoRepository.save(memo));
     }
 
+    /**
+     * 폴더 안에서 맨 위로 올리거나 내린다.
+     *
+     * <p>깃발은 고친 시각을 건드리지 않는 쿼리로 바꾼다. 그 쿼리가 영속성 컨텍스트를
+     * 비우므로, 바뀐 값을 담아 돌려주려면 한 번 더 읽어야 한다.
+     */
+    @Transactional
+    public MemoDtos.MemoView setPinned(Long id, boolean value) {
+        Memo memo = loadMemo(id);
+        if (memo.isPinned() == value) return MemoDtos.MemoView.of(memo);
+
+        memoRepository.updatePinned(id, currentUser.requireId(), value);
+        return MemoDtos.MemoView.of(loadMemo(id));
+    }
+
+    @Transactional
+    public MemoDtos.MemoView setFavorite(Long id, boolean value) {
+        Memo memo = loadMemo(id);
+        if (memo.isFavorite() == value) return MemoDtos.MemoView.of(memo);
+
+        memoRepository.updateFavorite(id, currentUser.requireId(), value);
+        return MemoDtos.MemoView.of(loadMemo(id));
+    }
+
     @Transactional
     public void delete(Long id) {
         memoRepository.delete(loadMemo(id));

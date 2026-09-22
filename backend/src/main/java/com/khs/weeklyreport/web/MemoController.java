@@ -84,6 +84,24 @@ public class MemoController {
         return memoService.move(id, request);
     }
 
+    /*
+     * 깃발은 본문 저장과 따로 받는다. 저장 경로에 얹으면 편집기가 1.2초마다 보내는
+     * 자동 저장이 그때 열려 있던 값으로 깃발을 되돌린다 — 다른 탭에서 방금 누른 별이
+     * 소리 없이 풀린다.
+     */
+
+    @PutMapping("/{id}/pin")
+    public MemoDtos.MemoView pin(@PathVariable Long id,
+                                 @Valid @RequestBody MemoDtos.FlagRequest request) {
+        return memoService.setPinned(id, request.value());
+    }
+
+    @PutMapping("/{id}/favorite")
+    public MemoDtos.MemoView favorite(@PathVariable Long id,
+                                      @Valid @RequestBody MemoDtos.FlagRequest request) {
+        return memoService.setFavorite(id, request.value());
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {

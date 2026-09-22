@@ -8,6 +8,9 @@ const LAST_KEY = 'weekly-report:last-memo'
 /** 최상위(폴더 없음)를 가리키는 값. null 은 "아무것도 안 고름"과 겹쳐 쓸 수 없다. */
 export const ROOT = 'root'
 
+/** 폴더가 아니라 '즐겨찾기한 것만' 이라는 뜻. 트리 맨 위에 폴더처럼 놓인다. */
+export const FAVORITES = 'favorites'
+
 export const useMemoStore = defineStore('memo', () => {
   const folders = ref([])
   const memos = ref([])
@@ -60,21 +63,28 @@ export const useMemoStore = defineStore('memo', () => {
   const visibleMemos = computed(() => {
     const q = query.value.trim().toLowerCase()
     if (q) {
+      // 찾을 때는 고정을 따지지 않는다. 찾는 것은 폴더 안 자리와 상관이 없다.
       return memos.value.filter(
         (m) =>
           m.title.toLowerCase().includes(q) || (m.preview ?? '').toLowerCase().includes(q),
       )
     }
+
     const folderId = selectedFolderId.value
-    return memos.value.filter((m) =>
-      folderId === ROOT ? m.folderId == null : m.folderId === folderId,
-    )
+    // 즐겨찾기는 여러 폴더에서 모아 온 것이라 '폴더 안에서 맨 위'가 뜻을 갖지 못한다
+    if (folderId === FAVORITES) return memos.value.filter((m) => m.favorite)
+
+    return memos.value
+      .filter((m) => (folderId === ROOT ? m.folderId == null : m.folderId === folderId))
+      .sort(pinnedFirst)
   })
 
   const searching = computed(() => query.value.trim().length > 0)
 
   /** 최상위(폴더 없음)에 놓인 메모 수. 트리 맨 위 줄이 쓴다. */
   const rootCount = computed(() => memos.value.filter((m) => m.folderId == null).length)
+
+  const favoriteCount = computed(() => memos.value.filter((m) => m.favorite).length)
 
   // ── 읽기 ─────────────────────────────────────────────────
 
@@ -98,6 +108,8 @@ export const useMemoStore = defineStore('memo', () => {
       title: saved.title,
       preview: firstLine(saved.content),
       chars: (saved.content ?? '').length,
+      pinned: saved.pinned,
+      favorite: saved.favorite,
       updatedAt: saved.updatedAt,
     }
     const at = memos.value.findIndex((m) => m.id === saved.id)
@@ -167,6 +179,7 @@ export const useMemoStore = defineStore('memo', () => {
     visibleMemos,
     searching,
     rootCount,
+    favoriteCount,
     query,
     selectedFolderId,
     pathOf,
@@ -182,6 +195,15 @@ export const useMemoStore = defineStore('memo', () => {
     reset,
   }
 })
+
+/**
+ * 고정한 것을 맨 위로. 같은 무리 안에서는 서버가 준 최근 순을 그대로 둔다
+ * (Array.sort 는 순서가 같은 것끼리 자리를 바꾸지 않는다).
+ */
+function pinnedFirst(a, b) {
+  if (a.pinned === b.pinned) return 0
+  return a.pinned ? -1 : 1
+}
 
 function firstLine(content) {
   if (!content || !content.trim()) return ''

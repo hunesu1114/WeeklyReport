@@ -53,6 +53,19 @@ public class Memo {
     @Column(name = "word_wrap", nullable = false)
     private boolean wordWrap = true;
 
+    /**
+     * 폴더 안에서 맨 위로 올린다.
+     *
+     * <p>메모는 한 폴더에만 들어 있으므로 깃발 하나로 폴더별 고정이 된다.
+     * 다른 폴더로 옮기면 고정도 따라간다 — 옮긴 자리에서도 중요한 글일 가능성이 높다.
+     */
+    @Column(name = "pinned", nullable = false)
+    private boolean pinned;
+
+    /** 폴더와 상관없이 한곳에 모아 본다. 고정과 달리 어디에 넣어 두었는지 몰라도 된다. */
+    @Column(name = "favorite", nullable = false)
+    private boolean favorite;
+
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 

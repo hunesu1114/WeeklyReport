@@ -10,6 +10,7 @@ import com.khs.weeklyreport.web.dto.MemoDtos;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -17,8 +18,13 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MemoServiceTest {
@@ -136,6 +142,47 @@ class MemoServiceTest {
         assertThat(view.wordWrap()).isFalse();
     }
 
+    // ── 고정과 즐겨찾기 ──────────────────────────────────────
+
+    @Test
+    void 고정하면_고친_시각은_그대로_둔다() {
+        Memo memo = memo(7L);
+        Instant before = memo.getUpdatedAt();
+
+        MemoDtos.MemoView view = service.setPinned(7L, true);
+
+        assertThat(view.pinned()).isTrue();
+        // 별을 눌렀을 뿐인데 목록 맨 위로 튀어 오르면 안 된다
+        assertThat(view.updatedAt()).isEqualTo(before);
+    }
+
+    @Test
+    void 이미_고정된_메모를_또_고정해도_쿼리를_보내지_않는다() {
+        memo(7L).setPinned(true);
+
+        assertThat(service.setPinned(7L, true).pinned()).isTrue();
+        verify(memoRepository, never()).updatePinned(anyLong(), anyLong(), anyBoolean());
+    }
+
+    @Test
+    void 즐겨찾기는_고정과_따로_켜진다() {
+        memo(7L);
+
+        MemoDtos.MemoView view = service.setFavorite(7L, true);
+
+        assertThat(view.favorite()).isTrue();
+        // 폴더 안 자리(고정)와 어디서나 꺼내 보기(즐겨찾기)는 다른 이야기다
+        assertThat(view.pinned()).isFalse();
+    }
+
+    @Test
+    void 남의_메모는_고정할_수_없다() {
+        when(memoRepository.findByIdAndOwnerId(99L, ME)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.setPinned(99L, true)).isInstanceOf(NotFoundException.class);
+        verify(memoRepository, never()).updatePinned(anyLong(), anyLong(), anyBoolean());
+    }
+
     @Test
     void 내보낸_txt_는_줄_끝이_CRLF_다() {
         Memo memo = new Memo();
@@ -163,6 +210,29 @@ class MemoServiceTest {
         when(memoRepository.findByIdAndOwnerId(6L, ME)).thenReturn(Optional.of(memo));
 
         assertThat(service.exportText(6L).filename()).isEqualTo("9_16 회의_ 결론_.txt");
+    }
+
+    /** 내 메모 한 장. 깃발 쿼리는 DB 가 하듯 그 자리에서 값만 바꾼다. */
+    private Memo memo(Long id) {
+        Memo memo = new Memo();
+        memo.setId(id);
+        memo.setOwner(me);
+        memo.setTitle("메모" + id);
+        memo.setContent("본문");
+        memo.setUpdatedAt(Instant.parse("2026-09-01T00:00:00Z"));
+        when(memoRepository.findByIdAndOwnerId(id, ME)).thenReturn(Optional.of(memo));
+
+        doAnswer(c -> {
+            memo.setPinned(c.getArgument(2));
+            return null;
+        }).when(memoRepository).updatePinned(eq(id), eq(ME), anyBoolean());
+
+        doAnswer(c -> {
+            memo.setFavorite(c.getArgument(2));
+            return null;
+        }).when(memoRepository).updateFavorite(eq(id), eq(ME), anyBoolean());
+
+        return memo;
     }
 
     private MemoFolder folder(Long id, MemoFolder parent) {

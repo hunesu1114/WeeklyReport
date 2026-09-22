@@ -3,13 +3,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import MemoTree from '@/components/MemoTree.vue'
 import { memoApi } from '@/api/client'
-import { useMemoStore, ROOT } from '@/stores/memo'
+import { useAuthStore } from '@/stores/auth'
+import { useMemoStore, ROOT, FAVORITES } from '@/stores/memo'
 import { useToast } from '@/composables/useToast'
 import { useNotepad } from '@/composables/useNotepad'
 import { lineCount } from '@/utils/notepad'
 import { timeAgo } from '@/utils/team'
 
 const store = useMemoStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 /** 저장하지 않은 채 이만큼 쉬면 알아서 저장한다. 메모장과 달리 잃을 이유가 없다. */
@@ -52,9 +54,29 @@ const folderOptions = computed(() =>
     .sort((a, b) => a.label.localeCompare(b.label, 'ko')),
 )
 
+/**
+ * 맨 위 칸 이름.
+ *
+ * '폴더 없음'은 없는 것을 이름으로 부른 것이라 자리처럼 읽히지 않는다.
+ * 탐색기가 맨 위를 계정 이름으로 부르듯 로그인 아이디를 건다 — 그 아래가 내 것 전부다.
+ */
+const rootLabel = computed(() => auth.user?.username || '폴더 없음')
+
 const breadcrumb = computed(() => {
   if (!memo.value) return []
-  return memo.value.folderId == null ? ['폴더 없음'] : store.pathOf(memo.value.folderId)
+  return memo.value.folderId == null ? [rootLabel.value] : store.pathOf(memo.value.folderId)
+})
+
+const listLabel = computed(() => {
+  if (store.searching) return `검색 결과 ${store.visibleMemos.length}`
+  if (store.selectedFolderId === FAVORITES) return `즐겨찾기 ${store.visibleMemos.length}`
+  return `메모 ${store.visibleMemos.length}`
+})
+
+const emptyText = computed(() => {
+  if (store.searching) return '찾는 메모가 없습니다.'
+  if (store.selectedFolderId === FAVORITES) return '즐겨찾기한 메모가 없습니다. 목록에서 ☆ 를 누르세요.'
+  return '이 폴더에 메모가 없습니다.'
 })
 
 const stats = computed(() => {
@@ -152,12 +174,14 @@ function payloadOf(m) {
 async function createMemo(folderId = undefined) {
   if (dirty.value) await save()
 
+  // 즐겨찾기는 폴더가 아니다. 거기서 새로 만들면 최상위에 놓는다.
+  const selected = store.selectedFolderId
   const target =
     folderId !== undefined
       ? folderId
-      : store.selectedFolderId === ROOT
+      : selected === ROOT || selected === FAVORITES
         ? null
-        : store.selectedFolderId
+        : selected
 
   busy.value = true
   try {
@@ -205,6 +229,29 @@ async function exportText() {
     toast.error(`내보내지 못했습니다. ${error.message}`)
   }
 }
+
+// ── 고정과 즐겨찾기 ─────────────────────────────────────
+
+/**
+ * 깃발을 뒤집는다.
+ *
+ * 본문 저장과 따로 보낸다. 편집 중이라도 바로 눌리고, 고친 시각도 오르지 않아
+ * 목록이 제자리에 있는다. 편집기에 열려 있는 메모라면 그 깃발만 갈아 끼운다 —
+ * 아직 저장하지 않은 본문은 그대로 둬야 한다.
+ */
+async function toggleFlag(item, flag) {
+  const send = flag === 'pinned' ? memoApi.setPinned : memoApi.setFavorite
+  try {
+    const saved = await send(item.id, !item[flag])
+    store.applySaved(saved)
+    if (memo.value?.id === saved.id) memo.value = { ...memo.value, [flag]: saved[flag] }
+  } catch (error) {
+    toast.error(error.message)
+  }
+}
+
+const togglePin = (item) => toggleFlag(item, 'pinned')
+const toggleFavorite = (item) => toggleFlag(item, 'favorite')
 
 /** 폴더를 바꾸면 곧바로 저장한다. 목록에서 제자리를 찾아야 하기 때문이다. */
 async function changeFolder(value) {
@@ -290,6 +337,17 @@ function onDropRoot(event) {
   else if (folderId) dropFolder({ folderId: Number(folderId), parentId: null })
 }
 
+/** 즐겨찾기 칸에 떨어뜨리면 별이 붙는다. 폴더는 담기지 않는다 — 메모만 모으는 곳이다. */
+function onDropFavorites(event) {
+  event.preventDefault()
+  const memoId = event.dataTransfer.getData('application/x-memo-id')
+  if (!memoId) return
+
+  const item = store.memos.find((m) => m.id === Number(memoId))
+  // 이미 별이 붙어 있으면 아무 일도 없다. 끌어다 놓아 풀리면 놀란다.
+  if (item && !item.favorite) toggleFavorite(item)
+}
+
 watch(
   () => finder.value.open,
   async (open) => {
@@ -352,13 +410,26 @@ watch(
         <div class="lnb__tree">
           <div
             class="root"
+            :class="{ 'root--on': store.selectedFolderId === FAVORITES }"
+            @dragover.prevent
+            @drop="onDropFavorites"
+          >
+            <button class="root__btn" type="button" @click="store.selectFolder(FAVORITES)">
+              <span aria-hidden="true">⭐</span>
+              즐겨찾기
+              <span v-if="store.favoriteCount" class="root__count">{{ store.favoriteCount }}</span>
+            </button>
+          </div>
+
+          <div
+            class="root"
             :class="{ 'root--on': store.selectedFolderId === ROOT }"
             @dragover.prevent
             @drop="onDropRoot"
           >
             <button class="root__btn" type="button" @click="store.selectFolder(ROOT)">
               <span aria-hidden="true">🗂</span>
-              폴더 없음
+              {{ rootLabel }}
               <span v-if="store.rootCount" class="root__count">{{ store.rootCount }}</span>
             </button>
           </div>
@@ -382,29 +453,48 @@ watch(
         </div>
 
         <div class="lnb__list">
-          <div class="lnb__label tiny muted">
-            <template v-if="store.searching">검색 결과 {{ store.visibleMemos.length }}</template>
-            <template v-else>메모 {{ store.visibleMemos.length }}</template>
-          </div>
+          <div class="lnb__label tiny muted">{{ listLabel }}</div>
 
-          <p v-if="!store.visibleMemos.length" class="lnb__empty tiny muted">
-            {{ store.searching ? '찾는 메모가 없습니다.' : '이 폴더에 메모가 없습니다.' }}
-          </p>
+          <p v-if="!store.visibleMemos.length" class="lnb__empty tiny muted">{{ emptyText }}</p>
 
           <ul v-else class="notes">
             <li v-for="item in store.visibleMemos" :key="item.id">
-              <button
+              <div
                 class="note"
                 :class="{ 'note--on': memo?.id === item.id }"
-                type="button"
                 draggable="true"
                 @dragstart="onDragMemo($event, item)"
-                @click="openMemo(item.id)"
               >
-                <span class="note__title">{{ item.title }}</span>
-                <span class="note__preview tiny muted">{{ item.preview || '(내용 없음)' }}</span>
-                <span class="note__when tiny muted">{{ timeAgo(item.updatedAt) }}</span>
-              </button>
+                <button class="note__open" type="button" @click="openMemo(item.id)">
+                  <span class="note__title">{{ item.title }}</span>
+                  <span class="note__preview tiny muted">{{ item.preview || '(내용 없음)' }}</span>
+                  <span class="note__when tiny muted">{{ timeAgo(item.updatedAt) }}</span>
+                </button>
+
+                <!-- 켜진 깃발은 늘 보인다. 버튼이 곧 표시라, 같은 것을 두 번 그리지 않는다 -->
+                <span class="note__flags">
+                  <button
+                    class="note__flag"
+                    :class="{ 'note__flag--on': item.pinned }"
+                    type="button"
+                    :aria-pressed="item.pinned"
+                    :title="item.pinned ? '고정 해제' : '이 폴더 맨 위에 고정'"
+                    @click.stop="togglePin(item)"
+                  >
+                    📌
+                  </button>
+                  <button
+                    class="note__flag"
+                    :class="{ 'note__flag--on': item.favorite }"
+                    type="button"
+                    :aria-pressed="item.favorite"
+                    :title="item.favorite ? '즐겨찾기 해제' : '즐겨찾기에 담기'"
+                    @click.stop="toggleFavorite(item)"
+                  >
+                    {{ item.favorite ? '★' : '☆' }}
+                  </button>
+                </span>
+              </div>
             </li>
           </ul>
         </div>
@@ -429,11 +519,32 @@ watch(
             aria-label="폴더"
             @change="changeFolder($event.target.value)"
           >
-            <option value="">폴더 없음</option>
+            <option value="">{{ rootLabel }}</option>
             <option v-for="option in folderOptions" :key="option.id" :value="option.id">
               {{ option.label }}
             </option>
           </select>
+
+          <button
+            class="btn btn--sm pad__flag"
+            :class="{ 'pad__flag--on': memo.pinned }"
+            type="button"
+            :aria-pressed="memo.pinned"
+            :title="memo.pinned ? '고정 해제' : '이 폴더 맨 위에 고정'"
+            @click="togglePin(memo)"
+          >
+            📌
+          </button>
+          <button
+            class="btn btn--sm pad__flag"
+            :class="{ 'pad__flag--on': memo.favorite }"
+            type="button"
+            :aria-pressed="memo.favorite"
+            :title="memo.favorite ? '즐겨찾기 해제' : '즐겨찾기에 담기'"
+            @click="toggleFavorite(memo)"
+          >
+            {{ memo.favorite ? '★' : '☆' }}
+          </button>
 
           <button class="btn btn--sm" type="button" :disabled="saving" @click="save">
             <span v-if="saving" class="spinner"></span>
@@ -739,15 +850,12 @@ kbd {
 
 .note {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: flex-start;
+  gap: 2px;
   width: 100%;
-  padding: 7px 8px;
-  border: 0;
+  padding-right: 4px;
   border-left: 2px solid transparent;
   border-radius: var(--radius-xs);
-  background: transparent;
-  text-align: left;
 }
 
 .note:hover {
@@ -759,6 +867,18 @@ kbd {
   background: var(--brand-soft);
 }
 
+.note__open {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
 .note__title {
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -766,6 +886,48 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * 켜진 깃발은 늘 또렷하고, 꺼진 것은 손이 올라갔을 때 흐리게만 나온다.
+ * 늘 떠 있으면 제목보다 버튼이 먼저 읽히고, 켜고 끈 것이 같은 진하기면
+ * 📌 처럼 색이 박힌 글자는 어느 쪽인지 알아볼 수 없다.
+ */
+.note__flags {
+  display: flex;
+  flex: none;
+  padding-top: 6px;
+}
+
+.note__flag {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-4);
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.note:hover .note__flag,
+.note:focus-within .note__flag {
+  opacity: 0.4;
+}
+
+.note__flag--on {
+  color: var(--warn);
+  opacity: 1;
+}
+
+/* 지금 겨누고 있는 것은 눌리기 전에 또렷해진다 */
+.note__flag:hover,
+.note__flag:focus-visible {
+  background: var(--surface);
+  opacity: 1;
 }
 
 .note__preview,
@@ -814,6 +976,19 @@ kbd {
 .pad__folder {
   flex: none;
   width: 168px;
+}
+
+.pad__flag {
+  flex: none;
+  width: 32px;
+  padding: 0;
+  color: var(--text-3);
+}
+
+.pad__flag--on {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .pad__font {

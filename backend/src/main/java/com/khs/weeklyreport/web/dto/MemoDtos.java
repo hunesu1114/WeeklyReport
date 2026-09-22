@@ -5,6 +5,7 @@ import com.khs.weeklyreport.domain.MemoFolder;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
@@ -60,6 +61,15 @@ public final class MemoDtos {
     public record MemoMoveRequest(Long folderId) {
     }
 
+    /**
+     * 고정·즐겨찾기를 켜고 끈다.
+     *
+     * <p>값을 받아서 켠다 — 서버가 알아서 뒤집게 두면 버튼을 두 번 누르거나
+     * 탭 두 개에서 누를 때 눌린 모양과 실제 상태가 엇갈린다.
+     */
+    public record FlagRequest(@NotNull Boolean value) {
+    }
+
     /** 목록용. 본문 대신 첫 줄 미리보기만 싣는다. */
     public record MemoSummary(
             Long id,
@@ -67,11 +77,14 @@ public final class MemoDtos {
             String title,
             String preview,
             int chars,
+            boolean pinned,
+            boolean favorite,
             Instant updatedAt
     ) {
         public static MemoSummary of(Memo memo) {
             return new MemoSummary(memo.getId(), memo.folderId(), memo.getTitle(), memo.preview(),
-                    memo.getContent() == null ? 0 : memo.getContent().length(), memo.getUpdatedAt());
+                    memo.getContent() == null ? 0 : memo.getContent().length(),
+                    memo.isPinned(), memo.isFavorite(), memo.getUpdatedAt());
         }
     }
 
@@ -84,13 +97,15 @@ public final class MemoDtos {
             Integer fontSize,
             String fontColor,
             boolean wordWrap,
+            boolean pinned,
+            boolean favorite,
             Instant createdAt,
             Instant updatedAt
     ) {
         public static MemoView of(Memo memo) {
             return new MemoView(memo.getId(), memo.folderId(), memo.getTitle(), memo.getContent(),
                     memo.getFontFamily(), memo.getFontSize(), memo.getFontColor(), memo.isWordWrap(),
-                    memo.getCreatedAt(), memo.getUpdatedAt());
+                    memo.isPinned(), memo.isFavorite(), memo.getCreatedAt(), memo.getUpdatedAt());
         }
     }
 
