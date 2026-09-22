@@ -132,32 +132,42 @@ ls -l /etc/edge/certs/weekly-report/
 ls -ld /etc/edge/certs/*/
 ```
 
-### 3. 서버 · DB 비밀번호 배치
+### 3. 서버 · JWT 서명 키 배치
+
+DB 비밀번호는 여기 없다. GitHub Secret `POSTGRES_PASSWORD` 가 원본이고 CI 가
+배포마다 `.env.deploy` 에 실어 내린다(다음 단계). 이 파일에는 JWT 키만 둔다.
 
 ```bash
 mkdir -p ~/weekly-report && cd ~/weekly-report
 ```
 
 ```bash
-umask 077 && printf 'POSTGRES_DB=weekly_report\nPOSTGRES_USER=weekly\nPOSTGRES_PASSWORD=%s\nAPP_JWT_SECRET=%s\n' "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" > .env.secrets
+umask 077 && printf 'POSTGRES_DB=weekly_report\nPOSTGRES_USER=weekly\nAPP_JWT_SECRET=%s\n' "$(openssl rand -base64 32)" > .env.secrets
 ```
 
 ```bash
 chmod 600 .env.secrets && cat .env.secrets
 ```
 
-> **이 파일은 배포마다 새로 만들면 안 된다.**
-> postgres 는 볼륨을 처음 만들 때의 비밀번호로 계정을 굳힌다. 이후 환경변수만 바꿔도
-> DB 안의 비밀번호는 그대로라, 다음 배포에서 인증 실패로 기동하지 못한다.
-> `APP_JWT_SECRET` 도 같다. 값이 바뀌면 발급해둔 로그인 토큰이 전부 무효가 된다.
-> 그래서 CI 가 만들지 않고 서버에 한 번만 둔다. 템플릿은 `deploy/env.secrets.example`.
+> **이 파일은 배포마다 새로 만들면 안 된다.** `APP_JWT_SECRET` 이 바뀌면 발급해둔
+> 로그인 토큰이 전부 무효가 되어 모두 튕긴다. 그래서 CI 가 만들지 않고 서버에
+> 한 번만 둔다. 템플릿은 `deploy/env.secrets.example`.
 
-> **이미 `.env.secrets` 가 있는 서버라면** `APP_JWT_SECRET` 한 줄만 덧붙인다.
-> 없어도 앱은 뜨지만 기동할 때마다 임시 키가 만들어져, 재배포·재시작 때마다
+> **이미 `.env.secrets` 가 있는 서버라면** `APP_JWT_SECRET` 이 있는지만 본다.
+> 없으면 앱은 뜨지만 기동할 때마다 임시 키가 만들어져, 재배포·재시작 때마다
 > 로그인이 전부 풀린다(로그에 경고가 크게 찍힌다).
 >
 > ```bash
 > cd ~/weekly-report && printf 'APP_JWT_SECRET=%s\n' "$(openssl rand -base64 32)" >> .env.secrets
+> ```
+>
+> 예전 구성에서 넘어온 서버라면 `POSTGRES_PASSWORD` 줄이 남아 있다.
+> **그 값을 먼저 GitHub Secret 에 넣고** 줄을 지운다. 순서를 바꾸면 다음 배포에서
+> 백엔드가 인증 실패로 재시작한다. `.env.deploy` 가 뒤에 와서 이기므로 남겨 두어도
+> 동작은 하지만, 값만 어긋난 채 남아 다음 사람을 헷갈리게 한다.
+>
+> ```bash
+> cd ~/weekly-report && grep POSTGRES_PASSWORD .env.secrets
 > ```
 
 ### 4. GitHub Secrets 등록
@@ -172,6 +182,15 @@ chmod 600 .env.secrets && cat .env.secrets
 | `SERVER_USER` | SSH 사용자 |
 | `SERVER_SSH_KEY` | SSH 개인키 전문 |
 | `SERVER_PORT` | SSH 포트 (22 면 생략 가능) |
+| `POSTGRES_PASSWORD` | 운영 DB 비밀번호 |
+
+> **`POSTGRES_PASSWORD` 는 한 번 넣으면 Secret 만 고쳐서 바꿀 수 없다.**
+> postgres 는 볼륨을 처음 만들 때의 비밀번호로 계정을 굳힌다. Secret 을 바꾸면
+> 컨테이너 환경변수만 바뀌고 DB 안의 계정은 그대로라, 백엔드가 인증 실패로
+> 재시작을 반복한다. 바꿀 때는 아래 "DB 비밀번호 바꾸기"를 따른다.
+>
+> **GitHub Secrets 는 등록한 값을 다시 볼 수 없다.** 백업이 되지 않는다는 뜻이다.
+> 비밀번호 관리자에 사본을 따로 둔다. 서버에서 읽는 방법은 아래 "운영 DB 조회".
 
 edge · SecretManager 저장소에 등록한 것과 같은 값이다.
 **Secret 은 저장소마다 따로다.** 다른 저장소에 넣은 값은 넘어오지 않는다.
@@ -242,7 +261,7 @@ postgres 는 **서버 루프백에만** 게시되어 있다 — `127.0.0.1:15434
    - Port `15434`
    - Database `weekly_report`
    - User `weekly`
-   - Password — 서버의 `~/weekly-report/.env.secrets` 의 `POSTGRES_PASSWORD`
+   - Password — 아래 "비밀번호를 어디서 읽나"
 4. **Options → Read-only 를 켠다**
 
 세 가지를 빠뜨리면 안 된다.
@@ -254,8 +273,16 @@ postgres 는 **서버 루프백에만** 게시되어 있다 — `127.0.0.1:15434
 - **Read-only 를 켠다.** DataGrip 은 스키마 인트로스펙션을 자동으로 돌리고,
   실수로 실행한 UPDATE 를 되돌려주지 않는다.
 
-비밀번호는 **서버의 `.env.secrets` 가 원본이다.** 이 파일은 CI 가 만들지 않고 서버에
-한 번 두고 그대로 두는 것이라(위 "최초 설정" 3번), 로컬에 사본을 두면 엇갈린다.
+### 비밀번호를 어디서 읽나
+
+원본은 GitHub Secret `POSTGRES_PASSWORD` 인데 **Secrets 는 다시 볼 수 없다.**
+CI 가 배포마다 서버에 내려놓은 사본에서 읽는다.
+
+```bash
+grep POSTGRES_PASSWORD ~/weekly-report/.env.deploy
+```
+
+이 파일은 배포마다 덮어써지지만 값은 Secret 그대로라 바뀌지 않는다.
 
 ### 터널 없이 — 서버에서 직접
 
@@ -263,7 +290,52 @@ postgres 는 **서버 루프백에만** 게시되어 있다 — `127.0.0.1:15434
 docker exec -it weekly-report-postgres psql -U weekly -d weekly_report
 ```
 
-이 경로는 호스트 포트를 거치지 않는다. 포트가 막혀 있어도 된다.
+이 경로는 호스트 포트를 거치지 않는다. 포트가 막혀 있어도 되고,
+**비밀번호도 필요 없다** — 유닉스 소켓 접속은 `trust` 다.
+
+---
+
+## DB 비밀번호 바꾸기
+
+**Secret 만 고치면 서비스가 죽는다.** postgres 는 볼륨을 처음 만들 때의 비밀번호로
+계정을 굳힌다. Secret 을 바꾸면 백엔드에 새 값이 들어가는데 DB 안의 계정은 옛
+비밀번호 그대로라, 백엔드가 인증 실패로 재시작을 반복한다.
+postgres 자신은 멀쩡히 뜨고 헬스체크도 통과한다(`pg_isready` 는 인증을 보지 않는다).
+
+두 곳을 같은 값으로 맞춰야 한다. 데이터는 건드리지 않으므로 볼륨을 지울 일은 없다.
+
+새 비밀번호에는 `$`, `#`, 따옴표, 공백을 쓰지 않는다. compose 가 env 파일을 읽을 때
+`$` 는 변수로, `#` 는 주석으로 먹는다. 영문·숫자·`-`·`_` 면 안전하다.
+
+**1. DB 안에서 바꾼다** (옛 비밀번호가 없어도 된다 — 소켓 접속은 `trust`)
+
+```bash
+docker exec -it weekly-report-postgres psql -U weekly -d weekly_report -c "ALTER USER weekly WITH PASSWORD '새비밀번호';"
+```
+
+**2. GitHub Secret `POSTGRES_PASSWORD` 를 같은 값으로 고친다**
+
+**3. 재배포한다.** Actions 탭에서 `CI/CD` 수동 실행. 손으로 할 거라면:
+
+```bash
+cd ~/weekly-report && sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=새비밀번호|" .env.deploy
+```
+
+```bash
+cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.secrets --env-file .env.deploy up -d
+```
+
+**4. 확인**
+
+```bash
+cd ~/weekly-report && docker compose -f docker-compose.prod.yml --env-file .env.secrets --env-file .env.deploy logs --tail 30 backend
+```
+
+`Started WeeklyReportApplication` 이 보이면 끝이다. `password authentication failed`
+가 보이면 두 곳의 값이 다르다.
+
+> 3번을 빠뜨리면 다음 배포까지 백엔드가 옛 비밀번호로 돌다가, 그때 가서 죽는다.
+> 바꾼 자리에서 끝내는 편이 낫다.
 
 ---
 
@@ -276,12 +348,12 @@ docker exec -it weekly-report-postgres psql -U weekly -d weekly_report
 | edge 배포가 `nginx -t` 에서 실패 | `/etc/edge/certs/weekly-report/` 에 인증서가 없다 (위 2번) |
 | `--install-cert` 가 `Permission denied` | 인증서 디렉터리가 root 소유다. 위 2번의 주석 참고 |
 | 60~90일 뒤 갑자기 인증서 만료 | 갱신 cron 이 인증서 디렉터리에 못 쓰고 있다. `acme.sh --list` 와 소유자 확인 |
-| 백엔드가 DB 인증 실패로 재시작 | `.env.secrets` 를 다시 만들었다. 아래 "DB 비밀번호를 잃어버렸을 때" |
+| 백엔드가 DB 인증 실패로 재시작 | Secret 만 바꾸고 `ALTER USER` 를 안 했다. 위 "DB 비밀번호 바꾸기" |
 | 재배포·재시작할 때마다 로그아웃됨 | `.env.secrets` 에 `APP_JWT_SECRET` 이 없다. 위 3번 참고 |
 | API 가 전부 401 | 토큰이 만료됐거나 없다. 화면이 로그인으로 돌려보낸다 |
 | 엉뚱한 사이트가 뜬다 | 해당 도메인의 server 블록이 없어 edge 기본 서버로 갔다 |
 | DataGrip 이 `connection refused` | 터널은 붙었는데 포트가 없다. 아래 확인 |
-| DataGrip 이 인증 실패 | 서버 `.env.secrets` 의 `POSTGRES_PASSWORD` 와 다르다 |
+| DataGrip 이 인증 실패 | 서버 `.env.deploy` 의 `POSTGRES_PASSWORD` 와 다르다 |
 
 `connection refused` 면 서버에서 포트가 실제로 떠 있는지 본다.
 `127.0.0.1:15434` 가 보여야 한다. `0.0.0.0` 이면 잘못된 것이니 즉시 고친다.
@@ -305,13 +377,24 @@ docker network inspect edge-net | grep -A2 weekly-report
 
 ### DB 비밀번호를 잃어버렸을 때
 
-주간보고 데이터는 되살릴 수 없으므로 먼저 덤프를 시도한다.
+**볼륨을 지울 일이 아니다.** postgres 컨테이너가 떠 있기만 하면 되찾을 수 있다.
+유닉스 소켓 접속은 `trust` 라, 옛 비밀번호 없이 `docker exec` 로 들어가 새로 정하면 된다.
+그대로 위 "DB 비밀번호 바꾸기"를 따른다.
+
+서버에 내려와 있는 사본이 남아 있을 수도 있으니 먼저 본다.
+
+```bash
+grep POSTGRES_PASSWORD ~/weekly-report/.env.deploy
+```
+
+무엇을 하든 그 전에 덤프를 떠 둔다. 주간보고 데이터는 되살릴 수 없다.
 
 ```bash
 docker exec weekly-report-postgres pg_dumpall -U weekly > ~/weekly-report-backup.sql
 ```
 
-컨테이너가 이미 죽어 붙지 못하면, 볼륨을 지우고 처음부터 다시 시작하는 수밖에 없다.
+볼륨을 지우는 것은 비밀번호 문제로는 할 일이 아니다. 데이터 파일 자체가 깨져
+컨테이너가 뜨지 못할 때, 덤프를 확보한 뒤의 마지막 수단이다.
 
 ```bash
 docker volume rm weekly-report-prod_postgres-data

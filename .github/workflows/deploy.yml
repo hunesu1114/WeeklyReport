@@ -136,12 +136,16 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           missing=""
           [ -n "$SERVER_HOST" ]         || missing="$missing SERVER_HOST"
           [ -n "$SERVER_USER" ]         || missing="$missing SERVER_USER"
           [ -n "$SERVER_SSH_KEY" ]      || missing="$missing SERVER_SSH_KEY"
           [ -n "$DOCKERHUB_USERNAME" ]  || missing="$missing DOCKERHUB_USERNAME"
+          # 비어 있으면 compose 가 :? 로 멈추지만, 그때는 서버 로그를 봐야 안다.
+          # 여기서 이름을 대고 먼저 끊는다.
+          [ -n "$POSTGRES_PASSWORD" ]   || missing="$missing POSTGRES_PASSWORD"
 
           if [ -n "$missing" ]; then
             echo "::error::이 저장소에 등록되지 않은 Secret:$missing"
@@ -165,12 +169,16 @@ jobs:
         env:
           COMPOSE_B64: ${{ steps.enc.outputs.b64 }}
           DOMAIN: ${{ env.DOMAIN }}
+          # 아래 heredoc 에 ${{ }} 로 직접 박지 않는다. 그러면 비밀번호 원문이
+          # 서버 셸의 입력이 되어, 값에 든 $ 나 ` 를 셸이 한 번 더 해석한다.
+          # 환경변수로 넘기면 heredoc 이 한 번만 펼쳐 값이 그대로 들어간다.
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || '22' }}
-          envs: COMPOSE_B64,DOMAIN
+          envs: COMPOSE_B64,DOMAIN,POSTGRES_PASSWORD
           script: |
             set -e
             mkdir -p ~/weekly-report
@@ -178,10 +186,9 @@ jobs:
 
             printf %s "$COMPOSE_B64" | base64 -d > docker-compose.prod.yml
 
-            # DB 비밀번호는 서버에만 둔다. CI 가 만들지 않는다.
+            # APP_JWT_SECRET 은 서버에만 둔다. CI 가 만들지 않는다.
             #
-            # postgres 는 볼륨을 처음 만들 때의 비밀번호로 계정을 굳힌다.
-            # 배포마다 새로 생성하면 다음 배포에서 인증 실패로 기동하지 못한다.
+            # 값이 바뀌면 발급해둔 로그인 토큰이 전부 무효가 된다.
             # 최초 1회만 손으로 배치하고 이후 건드리지 않는다.
             if [ ! -f .env.secrets ]; then
               echo "::error::~/weekly-report/.env.secrets 가 없습니다."
@@ -189,13 +196,19 @@ jobs:
               exit 1
             fi
 
-            # 여기에는 비밀이 아닌 배포 파라미터만 들어간다.
-            # 배포마다 최신값으로 덮어쓴다.
+            # 배포마다 최신값으로 덮어쓴다. .env.secrets 보다 뒤에 오므로
+            # 겹치는 키는 이쪽이 이긴다.
+            #
+            # POSTGRES_PASSWORD 는 GitHub Secret 이 원본이다. 여기서 값을 바꾸면
+            # 컨테이너 환경변수만 바뀌고 DB 안의 계정은 그대로라, 백엔드가 인증
+            # 실패로 재시작을 반복한다. 반드시 ALTER USER 를 함께 해야 한다
+            # (docs/deployment.md 의 "DB 비밀번호 바꾸기").
             umask 077
             cat > .env.deploy <<EOF
             DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
             IMAGE_TAG=${{ github.sha }}
             APP_CORS_ALLOWED_ORIGINS=https://$DOMAIN
+            POSTGRES_PASSWORD=$POSTGRES_PASSWORD
             EOF
 
             # edge 저장소가 만드는 공용 네트워크. 없으면 up 이 실패하므로 여기서 보장한다.
