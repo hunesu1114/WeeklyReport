@@ -130,6 +130,22 @@ function logout() {
         <RouterLink to="/" :class="{ 'topnav--on': section === 'reports' }">보고서</RouterLink>
         <RouterLink to="/kanban" :class="{ 'topnav--on': section === 'kanban' }">칸반</RouterLink>
         <RouterLink to="/memos" :class="{ 'topnav--on': section === 'memos' }">메모</RouterLink>
+
+        <!--
+          다른 앱이라 RouterLink 가 아니라 a 다. 새 창으로 여는 만큼 ↗ 로 미리 알린다 —
+          같은 줄에 나란히 있으면 이것도 화면이 바뀌는 탭으로 읽힌다.
+          noopener 없이 열면 저쪽 문서가 window.opener 로 이 창을 건드릴 수 있다.
+        -->
+        <a
+          class="topnav__out"
+          href="https://filehub-khs.duckdns.org/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          드라이브
+          <span class="topnav__ext" aria-hidden="true">↗</span>
+          <span class="sr-only">(새 창에서 열림)</span>
+        </a>
       </nav>
 
       <div class="topbar__right">
@@ -268,6 +284,19 @@ function logout() {
 .topnav a.topnav--on {
   background: var(--brand-soft);
   color: var(--brand-strong);
+}
+
+/* 여기만 앱 밖으로 나간다. 화살표가 글자에 붙어 다니도록 묶어 둔다 */
+.topnav__out {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topnav__ext {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.6;
 }
 
 .topbar__right {
