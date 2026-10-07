@@ -241,6 +241,17 @@ async function download() {
   }
 }
 
+/**
+ * 목록으로 돌아간다.
+ * 새 보고서는 임시 저장이 남으니 그냥 나가고, 수정 중인 내용만 날아가기 전에 묻는다.
+ */
+function goToList() {
+  if (dirty.value && !isNew.value && !window.confirm('저장하지 않은 변경이 있습니다. 목록으로 나갈까요?')) {
+    return
+  }
+  router.push({ name: 'reports' })
+}
+
 async function removeReport() {
   if (isNew.value) return
   if (!window.confirm('이 주간보고를 삭제할까요? 되돌릴 수 없습니다.')) return
@@ -284,6 +295,7 @@ function onGlobalKeydown(event) {
   <div class="editor" :class="{ 'editor--split': showPreview }">
     <div class="editor__actions">
       <div class="editor__heading">
+        <button class="btn btn--ghost btn--sm" type="button" @click="goToList">← 목록</button>
         <h1>{{ isNew ? '새 주간보고' : '주간보고 수정' }}</h1>
         <span v-if="dirty" class="badge badge--warn">저장 안 됨</span>
         <span v-else-if="!isNew" class="badge badge--ok">저장됨</span>
