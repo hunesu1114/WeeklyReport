@@ -74,6 +74,8 @@
   --shadow-2: 0 6px 20px rgba(16, 20, 27, 0.09);
   --shadow-3: 0 18px 50px rgba(16, 20, 27, 0.18);
   --ring: 0 0 0 3px rgba(34, 197, 94, 0.22);
+  /* 드래그로 고른 글자. brand-soft 는 흰 바탕과 거의 같아 고른 범위가 안 보인다 */
+  --selection: rgba(22, 163, 74, 0.32);
 
   /*
    * 화면 전체를 맑은 고딕으로 통일한다.
@@ -132,6 +134,7 @@
     --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.5);
     --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.6);
     --ring: 0 0 0 3px rgba(74, 222, 128, 0.25);
+    --selection: rgba(52, 209, 127, 0.4);
   }
 }
 
@@ -180,6 +183,7 @@
   --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.5);
   --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.6);
   --ring: 0 0 0 3px rgba(74, 222, 128, 0.25);
+  --selection: rgba(52, 209, 127, 0.4);
 }
 
 * {
@@ -226,7 +230,7 @@ a {
 }
 
 ::selection {
-  background: var(--brand-soft);
+  background: var(--selection);
   color: var(--text);
 }
 
