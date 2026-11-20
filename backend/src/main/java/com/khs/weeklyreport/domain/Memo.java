@@ -69,6 +69,15 @@ public class Memo {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    /**
+     * 휴지통에 넣은 시각. 비어 있으면 살아 있는 메모다.
+     *
+     * <p>엔티티로 바꾸지 않고 {@code MemoRepository.updateDeletedAt} 으로 바꾼다 —
+     * 감사가 고친 시각을 올리면 되살렸을 때 목록 맨 위로 튀어 오른다.
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -79,6 +88,10 @@ public class Memo {
 
     public Long folderId() {
         return folder == null ? null : folder.getId();
+    }
+
+    public boolean isTrashed() {
+        return deletedAt != null;
     }
 
     /** 목록에 띄울 한 줄 미리보기. 본문 첫 줄이 제목보다 내용을 잘 알려줄 때가 많다. */

@@ -79,13 +79,25 @@ public final class MemoDtos {
             int chars,
             boolean pinned,
             boolean favorite,
-            Instant updatedAt
+            Instant updatedAt,
+            /** 휴지통에 넣은 시각. 살아 있으면 비어 있다. */
+            Instant deletedAt
     ) {
         public static MemoSummary of(Memo memo) {
             return new MemoSummary(memo.getId(), memo.folderId(), memo.getTitle(), memo.preview(),
                     memo.getContent() == null ? 0 : memo.getContent().length(),
-                    memo.isPinned(), memo.isFavorite(), memo.getUpdatedAt());
+                    memo.isPinned(), memo.isFavorite(), memo.getUpdatedAt(), memo.getDeletedAt());
         }
+    }
+
+    /**
+     * 찾은 메모 하나.
+     *
+     * @param snippet 찾는 말이 든 본문 한 토막. 앞이 잘렸으면 '…'로 시작한다.
+     *                제목에만 있으면 첫 줄 미리보기.
+     * @param inTitle 제목에서 찾았는지. 목록이 '제목에 있음 / 본문에 있음'으로 묶는다.
+     */
+    public record SearchHit(MemoSummary memo, String snippet, boolean inTitle) {
     }
 
     public record MemoView(
@@ -100,19 +112,25 @@ public final class MemoDtos {
             boolean pinned,
             boolean favorite,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            Instant deletedAt
     ) {
         public static MemoView of(Memo memo) {
             return new MemoView(memo.getId(), memo.folderId(), memo.getTitle(), memo.getContent(),
                     memo.getFontFamily(), memo.getFontSize(), memo.getFontColor(), memo.isWordWrap(),
-                    memo.isPinned(), memo.isFavorite(), memo.getCreatedAt(), memo.getUpdatedAt());
+                    memo.isPinned(), memo.isFavorite(), memo.getCreatedAt(), memo.getUpdatedAt(),
+                    memo.getDeletedAt());
         }
     }
 
-    /** 화면이 처음에 한 번에 받아가는 것. 폴더 트리와 메모 목록을 따로 부르지 않는다. */
+    /**
+     * 화면이 처음에 한 번에 받아가는 것. 폴더 트리와 메모 목록을 따로 부르지 않는다.
+     * 휴지통도 함께 싣는다 — 사이드바가 몇 장 들었는지 늘 보여준다.
+     */
     public record WorkspaceView(
             java.util.List<FolderView> folders,
-            java.util.List<MemoSummary> memos
+            java.util.List<MemoSummary> memos,
+            java.util.List<MemoSummary> trash
     ) {
     }
 }

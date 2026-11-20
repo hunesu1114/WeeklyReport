@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 /** 메모장. 개인 것이라 모든 경로가 로그인한 사람 기준으로만 동작한다. */
 @RestController
@@ -30,6 +32,12 @@ public class MemoController {
     @GetMapping
     public MemoDtos.WorkspaceView workspace() {
         return memoService.workspace();
+    }
+
+    /** 제목과 본문에서 찾는다. 폴더를 가리지 않는다. */
+    @GetMapping("/search")
+    public List<MemoDtos.SearchHit> search(@RequestParam(name = "q", defaultValue = "") String query) {
+        return memoService.search(query);
     }
 
     // ── 폴더 ─────────────────────────────────────────────────
@@ -102,10 +110,28 @@ public class MemoController {
         return memoService.setFavorite(id, request.value());
     }
 
+    /** 휴지통으로 보낸다. 30일 안에는 되살릴 수 있다. */
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         memoService.delete(id);
+    }
+
+    @PostMapping("/{id}/restore")
+    public MemoDtos.MemoView restore(@PathVariable Long id) {
+        return memoService.restore(id);
+    }
+
+    /** 휴지통에 든 메모를 영구히 지운다. 살아 있는 메모는 거절한다. */
+    @DeleteMapping("/{id}/permanent")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void purge(@PathVariable Long id) {
+        memoService.purge(id);
+    }
+
+    @DeleteMapping("/trash")
+    public Map<String, Integer> emptyTrash() {
+        return Map.of("removed", memoService.emptyTrash());
     }
 
     /** 메모를 txt 로 내려받는다. 줄 끝은 메모장이 읽을 수 있게 CRLF 로 나간다. */
