@@ -40,7 +40,7 @@ onBeforeUnmount(() => {
             <p v-if="subtitle" class="modal__subtitle tiny muted">{{ subtitle }}</p>
           </div>
           <button class="btn btn--ghost btn--icon" type="button" aria-label="닫기" @click="emit('close')">
-            ✕
+            <AppIcon name="close" :size="15" />
           </button>
         </header>
 

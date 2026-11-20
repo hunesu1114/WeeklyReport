@@ -33,7 +33,9 @@ const detailPlaceholder = computed(() =>
     @drop.prevent="emit('drop', index)"
   >
     <div class="item__bar">
-      <span class="item__handle" title="끌어서 순서 바꾸기" aria-hidden="true">⋮⋮</span>
+      <span class="item__handle" title="끌어서 순서 바꾸기" aria-hidden="true">
+        <AppIcon name="grip" :size="16" />
+      </span>
       <span class="item__no">{{ index + 1 }}</span>
 
       <div class="field item__name">
@@ -81,7 +83,7 @@ const detailPlaceholder = computed(() =>
           :disabled="index === 0"
           @click="emit('move', index, -1)"
         >
-          ↑
+          <AppIcon name="arrow-up" :size="15" />
         </button>
         <button
           class="btn btn--ghost btn--icon"
@@ -90,7 +92,7 @@ const detailPlaceholder = computed(() =>
           :disabled="index === total - 1"
           @click="emit('move', index, 1)"
         >
-          ↓
+          <AppIcon name="arrow-down" :size="15" />
         </button>
         <button
           class="btn btn--ghost btn--icon"
@@ -98,7 +100,7 @@ const detailPlaceholder = computed(() =>
           title="복제"
           @click="emit('duplicate', index)"
         >
-          ⧉
+          <AppIcon name="copy" :size="15" />
         </button>
         <button
           class="btn btn--ghost btn--icon btn--danger"
@@ -106,7 +108,7 @@ const detailPlaceholder = computed(() =>
           title="삭제"
           @click="emit('remove', index)"
         >
-          ✕
+          <AppIcon name="trash" :size="15" />
         </button>
       </div>
     </div>
@@ -162,10 +164,9 @@ const detailPlaceholder = computed(() =>
 }
 
 .item__handle {
-  padding-bottom: 9px;
+  padding-bottom: 8px;
   color: var(--text-4);
   cursor: grab;
-  letter-spacing: -2px;
   user-select: none;
 }
 

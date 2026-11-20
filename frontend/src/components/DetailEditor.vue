@@ -154,7 +154,8 @@ function onKeydown(event) {
           title="현재 줄을 하위 항목으로"
           @click="prefixCurrentLine('   - ')"
         >
-          ↳ 하위
+          <AppIcon name="corner-down-right" :size="13" />
+          하위
         </button>
       </span>
       <span class="detail-editor__hint tiny muted">Tab 들여쓰기 · Enter 목록 이어쓰기</span>
@@ -203,9 +204,12 @@ function onKeydown(event) {
 }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 3px 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: var(--surface);
   color: var(--text-3);
   font-size: 11px;

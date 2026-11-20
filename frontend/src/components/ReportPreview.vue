@@ -118,6 +118,8 @@ const excluded = computed(() => roundHours((Number(props.form.baseHours) || 0) -
   background: #fff;
   color: #14171c;
   color-scheme: light;
+  /* 엑셀과 같은 글꼴이어야 줄 바꿈 자리가 결과물과 맞는다 */
+  font-family: var(--font-mono);
   border-radius: 0 0 var(--radius) var(--radius);
 }
 

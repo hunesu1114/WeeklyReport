@@ -13,9 +13,20 @@
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- 모바일 주소창 색. 라이트/다크 각각 배경색과 맞춘다. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1014" />
+    <!-- 모바일 주소창 색. 상단 막대 색과 맞춘다. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1d1f" />
+
+    <!--
+      화면 글꼴. 한글 글꼴은 글자 범위별로 잘게 나뉘어 있어, 화면에 실제로 나온
+      글자가 든 조각만 내려받는다. 못 받으면 맑은 고딕으로 떨어진다.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap"
+    />
   </head>
   <body>
     <div id="app"></div>

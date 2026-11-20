@@ -7,6 +7,7 @@ import { SESSION_EXPIRED_MESSAGE, setUnauthorizedHandler } from './api/client'
 import { muteErrors } from './composables/useToast'
 import { useAuthStore } from './stores/auth'
 import { datePicker } from './directives/datePicker'
+import AppIcon from './components/AppIcon.vue'
 import './assets/main.css'
 
 // 첫 페인트 전에 테마를 적용해야 라이트 화면이 번쩍이지 않는다.
@@ -42,5 +43,8 @@ setUnauthorizedHandler(() => {
 
 // 날짜 입력은 칸 아무 데나 눌러도 달력이 열려야 한다
 app.directive('date-picker', datePicker)
+
+// 아이콘은 거의 모든 화면이 쓴다. 파일마다 import 를 늘어놓지 않게 전역으로 둔다
+app.component('AppIcon', AppIcon)
 
 app.use(router).mount('#app')

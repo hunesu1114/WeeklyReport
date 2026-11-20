@@ -78,6 +78,8 @@ http.interceptors.response.use(
 
     const wrapped = new Error(message)
     wrapped.status = status
+    // 화면이 일부러 끊은 요청(새 검색어가 들어와 앞 검색을 버림). 알릴 일이 아니다.
+    wrapped.canceled = axios.isCancel(error)
     // 남이 먼저 고쳐서 거절당했다. 서버가 함께 준 '지금 값'을 잃지 않고 올려보낸다.
     // 이게 있어야 화면이 내 것과 남의 것을 나란히 보여줄 수 있다.
     if (status === 409 && data?.current) wrapped.conflict = data.current
@@ -234,8 +236,33 @@ export const memoApi = {
   get: (id) => http.get(`/memos/${id}`).then((r) => r.data),
   create: (payload) => http.post('/memos', payload).then((r) => r.data),
   update: (id, payload) => http.put(`/memos/${id}`, payload).then((r) => r.data),
+
+  /**
+   * 탭을 닫는 순간의 저장. axios 요청은 페이지가 사라지면 함께 끊기므로
+   * keepalive fetch 로 보낸다. 브라우저가 이런 요청의 본문을 64KB 까지만 받아 주니,
+   * 넘으면 보내지 않고 false — 부르는 쪽이 "나가시겠습니까?"로 붙잡아야 한다.
+   */
+  saveOnExit(id, payload) {
+    const body = JSON.stringify(payload)
+    if (!authToken || new Blob([body]).size > 60000) return false
+    fetch(`/api/memos/${id}`, {
+      method: 'PUT',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+      body,
+    }).catch(() => {})
+    return true
+  },
   move: (id, folderId) => http.put(`/memos/${id}/move`, { folderId }).then((r) => r.data),
+
+  /** 제목·본문에서 찾는다. [{ memo, snippet, inTitle }] */
+  search: (q, signal) => http.get('/memos/search', { params: { q }, signal }).then((r) => r.data),
+
+  /* 지우기는 휴지통으로 보낸다. 30일 안에는 되살릴 수 있다. */
   remove: (id) => http.delete(`/memos/${id}`),
+  restore: (id) => http.post(`/memos/${id}/restore`).then((r) => r.data),
+  purge: (id) => http.delete(`/memos/${id}/permanent`),
+  emptyTrash: () => http.delete('/memos/trash').then((r) => r.data),
 
   /* 깃발은 본문 저장과 따로 보낸다. 자동 저장이 끼어들어 방금 누른 것을 되돌리지 않게. */
   setPinned: (id, value) => http.put(`/memos/${id}/pin`, { value }).then((r) => r.data),

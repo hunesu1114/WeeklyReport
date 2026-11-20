@@ -347,7 +347,7 @@ async function onMembersChanged() {
   <div class="kanban">
     <header class="kanban__head">
       <div class="kanban__title">
-        <h1>칸반 보드</h1>
+        <h1 class="page-title">칸반 보드</h1>
         <p v-if="board" class="tiny muted">
           <span class="num">전체 {{ totals.all }} · 진행할 일 {{ totals.open }} · 완료 {{ totals.done }}</span>
           <template v-if="totals.dueSoon">
@@ -369,12 +369,16 @@ async function onMembersChanged() {
           @click="exportBoard"
         >
           <span v-if="exporting" class="spinner"></span>
-          엑셀 내려받기
+          <AppIcon v-else name="download" :size="14" />
+          엑셀
         </button>
         <button v-if="board && amOwner" class="btn btn--sm" type="button" @click="openProjectSettings">
           프로젝트 설정
         </button>
-        <button class="btn btn--sm" type="button" @click="openNewProject">+ 새 프로젝트</button>
+        <button class="btn btn--sm" type="button" @click="openNewProject">
+          <AppIcon name="plus" :size="14" />
+          새 프로젝트
+        </button>
         <!-- 읽기 전용 참여자에게는 아예 감춘다. 막힌 버튼을 눌러보고
              거절당하는 것보다 처음부터 안 보이는 게 낫다. -->
         <button
@@ -384,7 +388,8 @@ async function onMembersChanged() {
           :disabled="!board"
           @click="openNewCard('BACKLOG')"
         >
-          + 카드 추가
+          <AppIcon name="plus" :size="14" />
+          카드 추가
         </button>
         <span v-else-if="board" class="kanban__readonly tiny">읽기 전용으로 참여 중</span>
       </div>
@@ -525,7 +530,7 @@ async function onMembersChanged() {
 .kanban {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .kanban__head {
@@ -536,28 +541,24 @@ async function onMembersChanged() {
   gap: 12px;
 }
 
-.kanban__title h1 {
-  margin: 0;
-  font-size: 19px;
-  letter-spacing: -0.02em;
-}
-
 .kanban__title p {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
 }
 
+/* 임박은 호박색. 빨강은 지난 것에만 남겨 둔다 */
 .kanban__due {
-  color: var(--danger);
-  font-weight: 600;
+  color: var(--warn);
+  font-weight: 500;
 }
 
 .kanban__role {
   color: var(--brand-strong);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .kanban__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -571,26 +572,29 @@ async function onMembersChanged() {
   text-align: center;
 }
 
-/* ---------- 참여자 바 ---------- */
+/* ---------- 참여자 줄 ---------- */
+/* 상자로 감싸지 않는다. 탭 아래 한 줄로 놓이고, 보드와는 여백으로만 떨어진다 */
 .team {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
 }
 
 .team__faces {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px 2px 2px;
+  gap: 0;
+  padding: 2px 8px 2px 2px;
   border: 0;
   border-radius: 999px;
   background: transparent;
+}
+
+/* 얼굴을 살짝 겹쳐 한 무리로 읽히게 한다 */
+.team__faces > :deep(*:not(:first-child)) {
+  margin-left: -6px;
+  box-shadow: 0 0 0 2px var(--bg);
 }
 
 .team__faces:hover {
@@ -603,24 +607,21 @@ async function onMembersChanged() {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--bg-subtle);
-  color: var(--text-3);
+  background: var(--surface-sel);
+  color: var(--text-2);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .team__label {
-  margin-left: 4px;
+  margin-left: 8px;
   color: var(--text-3);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .team__warn {
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--warn-soft);
   color: var(--warn);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .team__filter {
@@ -628,115 +629,108 @@ async function onMembersChanged() {
   gap: 2px;
   margin-left: auto;
   padding: 2px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--surface);
 }
 
 .team__chip {
-  padding: 4px 11px;
+  padding: 3px 10px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-3);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .team__chip:hover {
   color: var(--text);
 }
 
-.team__chip--on {
-  background: var(--surface);
-  color: var(--brand-strong);
-  box-shadow: var(--shadow-1);
+.team__chip--on,
+.team__chip--on:hover {
+  background: var(--surface-sel);
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* ---------- 프로젝트 탭 ---------- */
+/* 머리글 메뉴와 같은 말투 — 지금 보는 것은 밑줄로 */
 .tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding-bottom: 2px;
+  gap: 0 20px;
+  border-bottom: 1px solid var(--line);
 }
 
 .tab {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 11px;
-  border: 1px solid var(--line);
-  /* 알약은 배지에만 남긴다. 같은 줄의 버튼과 곡률이 다르면 한 세트로 안 보인다 */
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-2);
+  margin-bottom: -1px;
+  padding: 8px 1px 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-3);
   font-size: var(--fs);
-  font-weight: 600;
-  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  font-weight: 500;
+  transition: color 0.12s, border-color 0.12s;
 }
 
 .tab:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .tab--on {
-  border-color: var(--brand);
-  background: var(--brand-soft);
-  color: var(--brand-strong);
+  border-bottom-color: var(--text);
+  color: var(--text);
+  font-weight: 600;
 }
 
 .tab__dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 2px;
 }
 
 .tab__count {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--bg-subtle);
   color: var(--text-3);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.tab--on .tab__count {
-  background: var(--surface);
+  font-family: var(--font-num);
+  font-size: 11.5px;
+  font-weight: 400;
 }
 
 .tab__due {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--warn);
+  font-family: var(--font-num);
+  font-size: 11.5px;
+  font-weight: 500;
 }
 
 .tab__role {
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
   background: var(--warn-soft);
   color: var(--warn);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .kanban__readonly {
-  padding: 6px 11px;
+  padding: 5px 10px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-sm);
   color: var(--text-3);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* ---------- 보드 ---------- */
 .board {
   display: grid;
   grid-template-columns: repeat(4, minmax(240px, 1fr));
-  gap: 12px;
+  gap: 16px;
   /*
    * 네 칸의 높이를 맞춘다. 칸마다 제 길이를 가지면 보드 아래가 들쭉날쭉해
    * 활동 기록이 어디서 시작하는지 매번 달라진다. 빈 칸이 넓어지는 것은

@@ -1,19 +1,38 @@
 export const STATUSES = ['BACKLOG', 'TODO', 'ING', 'DONE']
 
+/*
+ * label 은 서버와 엑셀이 쓰는 이름이라 그대로 두고, 보드 칸 머리에는 name 을 크게 쓴다.
+ * 칸마다 색 점을 찍지 않는다 — 진행 중 하나만 키컬러 선으로 짚는다.
+ */
 export const STATUS_META = {
-  BACKLOG: { label: 'BACKLOG', hint: '언젠가 할 일', tone: 'neutral' },
-  TODO: { label: 'TODO', hint: '이번에 할 일', tone: 'info' },
-  ING: { label: 'ING', hint: '진행 중', tone: 'violet' },
-  DONE: { label: 'DONE', hint: '완료', tone: 'ok' },
+  BACKLOG: { label: 'BACKLOG', name: '쌓아 둔 일', hint: '언젠가 할 일', tone: 'neutral' },
+  TODO: { label: 'TODO', name: '할 일', hint: '이번에 할 일', tone: 'info' },
+  ING: { label: 'ING', name: '진행 중', hint: '진행 중', tone: 'violet' },
+  DONE: { label: 'DONE', name: '완료', hint: '완료', tone: 'ok' },
 }
 
 export const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT']
 
+/* level 은 카드에 그리는 막대 수(1~3). 색은 높음부터만 쓴다 */
 export const PRIORITY_META = {
-  LOW: { label: '낮음', tone: 'neutral' },
-  NORMAL: { label: '보통', tone: 'info' },
-  HIGH: { label: '높음', tone: 'warn' },
-  URGENT: { label: '긴급', tone: 'danger' },
+  LOW: { label: '낮음', tone: 'neutral', level: 1 },
+  NORMAL: { label: '보통', tone: 'info', level: 2 },
+  HIGH: { label: '높음', tone: 'warn', level: 3 },
+  URGENT: { label: '긴급', tone: 'danger', level: 3 },
+}
+
+/** 'D-2' · 'D-day' · 'D+3'. 카드처럼 좁은 곳에 쓴다. */
+export function dueShort(daysUntilDue) {
+  if (daysUntilDue === null || daysUntilDue === undefined) return ''
+  if (daysUntilDue === 0) return 'D-day'
+  return daysUntilDue > 0 ? `D-${daysUntilDue}` : `D+${Math.abs(daysUntilDue)}`
+}
+
+/** '2026-11-22' → '11.22' */
+export function shortDate(iso) {
+  if (!iso) return ''
+  const [, m, d] = String(iso).split('-')
+  return m && d ? `${Number(m)}.${d}` : String(iso)
 }
 
 /** 완료일까지 남은 날을 사람이 읽는 말로. */

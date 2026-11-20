@@ -262,7 +262,7 @@ async function toggleLogs() {
     <section v-if="!isNew" class="clog">
       <button class="clog__toggle" type="button" @click="toggleLogs">
         <span>이 카드의 활동 기록</span>
-        <span aria-hidden="true">{{ logsOpen ? '▾' : '▸' }}</span>
+        <AppIcon :name="logsOpen ? 'chevron-down' : 'chevron-right'" :size="14" />
       </button>
 
       <div v-if="logsOpen" class="clog__body">

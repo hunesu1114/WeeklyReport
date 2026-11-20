@@ -1,23 +1,37 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { memoApi } from '@/api/client'
 
 const OPEN_KEY = 'weekly-report:memo-open-folders'
 const LAST_KEY = 'weekly-report:last-memo'
 
-/** 최상위(폴더 없음)를 가리키는 값. null 은 "아무것도 안 고름"과 겹쳐 쓸 수 없다. */
+/*
+ * 사이드바에서 고를 수 있는 것. 폴더 id(숫자) 말고는 아래 넷이다.
+ * null 은 "아무것도 안 고름"과 겹쳐 쓸 수 없어 문자열로 둔다.
+ */
+
+/** 모든 메모. 폴더와 상관없이 최근에 고친 순. 처음 열면 여기다. */
+export const RECENT = 'recent'
+
+/** 폴더 밖에 놓인 메모(미분류). */
 export const ROOT = 'root'
 
-/** 폴더가 아니라 '즐겨찾기한 것만' 이라는 뜻. 트리 맨 위에 폴더처럼 놓인다. */
+/** 폴더가 아니라 '즐겨찾기한 것만' 이라는 뜻. */
 export const FAVORITES = 'favorites'
+
+/** 휴지통. 30일이 지나면 서버가 정리한다. */
+export const TRASH = 'trash'
+
+/** 검색어를 치다 멈추면 이만큼 기다렸다 찾는다. 한 글자마다 서버를 부르지 않게. */
+const SEARCH_DELAY_MS = 220
 
 export const useMemoStore = defineStore('memo', () => {
   const folders = ref([])
   const memos = ref([])
+  const trash = ref([])
   const loading = ref(false)
 
-  /** 트리에서 고른 폴더. ROOT 면 최상위. */
-  const selectedFolderId = ref(ROOT)
+  const selectedFolderId = ref(RECENT)
   const openFolderIds = ref(new Set(readOpen()))
   const query = ref('')
 
@@ -53,37 +67,101 @@ export const useMemoStore = defineStore('memo', () => {
     return names
   }
 
-  // ── 목록 ─────────────────────────────────────────────────
+  // ── 찾기 ─────────────────────────────────────────────────
 
-  /**
-   * 오른쪽 목록에 띄울 메모.
-   * 검색어가 있으면 폴더를 무시하고 전체에서 찾는다 — 어느 폴더에 넣었는지
-   * 기억나지 않아서 찾는 것이므로, 고른 폴더 안에서만 찾으면 쓸모가 없다.
-   */
-  const visibleMemos = computed(() => {
-    const q = query.value.trim().toLowerCase()
-    if (q) {
-      // 찾을 때는 고정을 따지지 않는다. 찾는 것은 폴더 안 자리와 상관이 없다.
-      return memos.value.filter(
-        (m) =>
-          m.title.toLowerCase().includes(q) || (m.preview ?? '').toLowerCase().includes(q),
-      )
-    }
-
-    const folderId = selectedFolderId.value
-    // 즐겨찾기는 여러 폴더에서 모아 온 것이라 '폴더 안에서 맨 위'가 뜻을 갖지 못한다
-    if (folderId === FAVORITES) return memos.value.filter((m) => m.favorite)
-
-    return memos.value
-      .filter((m) => (folderId === ROOT ? m.folderId == null : m.folderId === folderId))
-      .sort(pinnedFirst)
-  })
+  const searchHits = ref([])
+  const searchLoading = ref(false)
+  const searchError = ref('')
+  let searchTimer = null
+  let searchCtrl = null
 
   const searching = computed(() => query.value.trim().length > 0)
 
-  /** 최상위(폴더 없음)에 놓인 메모 수. 트리 맨 위 줄이 쓴다. */
-  const rootCount = computed(() => memos.value.filter((m) => m.folderId == null).length)
+  /**
+   * 제목과 본문에서 찾는다. 서버에 묻는다 — 목록에는 본문 첫 줄밖에 없다.
+   * 앞 검색이 늦게 도착해 새 결과를 덮지 않도록, 새로 찾을 때 앞 것을 끊는다.
+   */
+  async function runSearch() {
+    const q = query.value.trim()
+    searchCtrl?.abort()
+    if (!q) {
+      searchHits.value = []
+      searchLoading.value = false
+      return
+    }
+    const ctrl = new AbortController()
+    searchCtrl = ctrl
+    searchLoading.value = true
+    try {
+      const hits = await memoApi.search(q, ctrl.signal)
+      if (ctrl.signal.aborted) return
+      searchHits.value = hits
+      searchError.value = ''
+    } catch (error) {
+      if (error.canceled || ctrl.signal.aborted) return
+      searchError.value = error.message
+    } finally {
+      if (searchCtrl === ctrl) searchLoading.value = false
+    }
+  }
 
+  watch(query, () => {
+    clearTimeout(searchTimer)
+    if (!query.value.trim()) {
+      runSearch()
+      return
+    }
+    searchLoading.value = true
+    searchTimer = setTimeout(runSearch, SEARCH_DELAY_MS)
+  })
+
+  /** 저장해서 내용이 바뀌었으면 결과도 다시 받는다. 찾고 있지 않으면 아무 일도 없다. */
+  function refreshSearch() {
+    if (!searching.value) return
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(runSearch, SEARCH_DELAY_MS)
+  }
+
+  // ── 목록 ─────────────────────────────────────────────────
+
+  /**
+   * 가운데 칸에 띄울 메모를 묶음째로.
+   *
+   * 폴더를 열면 고정한 것이 맨 위에 '고정됨'으로, 나머지는 고친 날짜대로
+   * 오늘 · 이번 주 · 지난주 · 달별로 묶는다. "3일 전" 같은 말을 줄마다 다는 것보다
+   * 언제쯤 쓴 것인지가 한눈에 들어온다.
+   */
+  const groups = computed(() => {
+    if (searching.value) {
+      const items = searchHits.value.map((hit) => ({ ...hit.memo, snippet: hit.snippet, inTitle: hit.inTitle }))
+      return [
+        { key: 'title', label: '제목에 있음', items: items.filter((m) => m.inTitle) },
+        { key: 'body', label: '본문에 있음', items: items.filter((m) => !m.inTitle) },
+      ].filter((g) => g.items.length)
+    }
+
+    const view = selectedFolderId.value
+    if (view === TRASH) {
+      return trash.value.length
+        ? [{ key: 'trash', label: '30일이 지나면 영구히 지워집니다', items: trash.value }]
+        : []
+    }
+    if (view === RECENT) return byDate(memos.value)
+    // 즐겨찾기는 여러 폴더에서 모아 온 것이라 '폴더 안에서 맨 위'가 뜻을 갖지 못한다
+    if (view === FAVORITES) return byDate(memos.value.filter((m) => m.favorite))
+
+    const inFolder = memos.value.filter((m) => (view === ROOT ? m.folderId == null : m.folderId === view))
+    const pinned = inFolder.filter((m) => m.pinned)
+    return [
+      ...(pinned.length ? [{ key: 'pinned', label: '고정됨', items: pinned }] : []),
+      ...byDate(inFolder.filter((m) => !m.pinned)),
+    ]
+  })
+
+  /** 묶음을 펼친 순서 그대로. 위아래 화살표와 '지운 뒤 다음 메모'가 쓴다. */
+  const visibleMemos = computed(() => groups.value.flatMap((g) => g.items))
+
+  const rootCount = computed(() => memos.value.filter((m) => m.folderId == null).length)
   const favoriteCount = computed(() => memos.value.filter((m) => m.favorite).length)
 
   // ── 읽기 ─────────────────────────────────────────────────
@@ -94,13 +172,14 @@ export const useMemoStore = defineStore('memo', () => {
       const data = await memoApi.workspace()
       folders.value = data.folders ?? []
       memos.value = data.memos ?? []
+      trash.value = data.trash ?? []
     } finally {
       loading.value = false
     }
     return memos.value
   }
 
-  /** 저장·삭제 뒤 목록만 최신으로. 편집 중인 본문은 건드리지 않는다. */
+  /** 저장·옮기기 뒤 목록만 최신으로. 편집 중인 본문은 건드리지 않는다. */
   function applySaved(saved) {
     const summary = {
       id: saved.id,
@@ -111,14 +190,32 @@ export const useMemoStore = defineStore('memo', () => {
       pinned: saved.pinned,
       favorite: saved.favorite,
       updatedAt: saved.updatedAt,
+      deletedAt: saved.deletedAt ?? null,
     }
-    const at = memos.value.findIndex((m) => m.id === saved.id)
-    if (at === -1) memos.value.unshift(summary)
-    else memos.value.splice(at, 1, summary)
+    memos.value = memos.value.filter((m) => m.id !== saved.id)
+    trash.value = trash.value.filter((m) => m.id !== saved.id)
+    // 고친 순으로 서 있어야 한다. 방금 고친 것은 맨 앞이다
+    if (summary.deletedAt) trash.value = [summary, ...trash.value]
+    else memos.value = [summary, ...memos.value].sort(byUpdatedDesc)
+  }
+
+  /** 휴지통으로 옮겼다. 서버에 다시 묻지 않고 그 자리에서 옮겨 둔다. */
+  function trashLocally(id) {
+    const item = memos.value.find((m) => m.id === id)
+    if (!item) return
+    memos.value = memos.value.filter((m) => m.id !== id)
+    trash.value = [{ ...item, deletedAt: new Date().toISOString() }, ...trash.value]
+    searchHits.value = searchHits.value.filter((hit) => hit.memo.id !== id)
   }
 
   function forget(id) {
     memos.value = memos.value.filter((m) => m.id !== id)
+    trash.value = trash.value.filter((m) => m.id !== id)
+    searchHits.value = searchHits.value.filter((hit) => hit.memo.id !== id)
+  }
+
+  function clearTrashLocally() {
+    trash.value = []
   }
 
   // ── 폴더 펼침 상태 ───────────────────────────────────────
@@ -166,18 +263,24 @@ export const useMemoStore = defineStore('memo', () => {
   function reset() {
     folders.value = []
     memos.value = []
+    trash.value = []
     query.value = ''
-    selectedFolderId.value = ROOT
+    searchHits.value = []
+    selectedFolderId.value = RECENT
   }
 
   return {
     folders,
     memos,
+    trash,
     loading,
     tree,
     folderById,
+    groups,
     visibleMemos,
     searching,
+    searchLoading,
+    searchError,
     rootCount,
     favoriteCount,
     query,
@@ -185,7 +288,10 @@ export const useMemoStore = defineStore('memo', () => {
     pathOf,
     load,
     applySaved,
+    trashLocally,
+    clearTrashLocally,
     forget,
+    refreshSearch,
     isOpen,
     toggleFolder,
     revealFolder,
@@ -196,13 +302,52 @@ export const useMemoStore = defineStore('memo', () => {
   }
 })
 
+// ── 날짜 묶음 ───────────────────────────────────────────────
+
 /**
- * 고정한 것을 맨 위로. 같은 무리 안에서는 서버가 준 최근 순을 그대로 둔다
- * (Array.sort 는 순서가 같은 것끼리 자리를 바꾸지 않는다).
+ * 고친 날짜로 묶는다. 한 주는 월요일에 시작한다 — 주간보고와 같은 달력이다.
+ * 지난주보다 오래된 것은 달 단위로 모은다. 올해가 아니면 연도를 붙인다.
  */
-function pinnedFirst(a, b) {
-  if (a.pinned === b.pinned) return 0
-  return a.pinned ? -1 : 1
+function byDate(list) {
+  const now = new Date()
+  const today = startOfDay(now)
+  const thisMonday = new Date(today)
+  thisMonday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
+  const lastMonday = new Date(thisMonday)
+  lastMonday.setDate(thisMonday.getDate() - 7)
+
+  const out = []
+  const push = (key, label, memo) => {
+    let group = out.find((g) => g.key === key)
+    if (!group) {
+      group = { key, label, items: [] }
+      out.push(group)
+    }
+    group.items.push(memo)
+  }
+
+  for (const memo of [...list].sort(byUpdatedDesc)) {
+    const at = new Date(memo.updatedAt)
+    if (at >= today) push('today', '오늘', memo)
+    else if (at >= thisMonday) push('week', '이번 주', memo)
+    else if (at >= lastMonday) push('last-week', '지난주', memo)
+    else {
+      const sameYear = at.getFullYear() === now.getFullYear()
+      const label = sameYear ? `${at.getMonth() + 1}월` : `${at.getFullYear()}년 ${at.getMonth() + 1}월`
+      push(`m-${at.getFullYear()}-${at.getMonth()}`, label, memo)
+    }
+  }
+  return out
+}
+
+function startOfDay(date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function byUpdatedDesc(a, b) {
+  return new Date(b.updatedAt) - new Date(a.updatedAt)
 }
 
 function firstLine(content) {

@@ -295,7 +295,10 @@ function onGlobalKeydown(event) {
   <div class="editor" :class="{ 'editor--split': showPreview }">
     <div class="editor__actions">
       <div class="editor__heading">
-        <button class="btn btn--ghost btn--sm" type="button" @click="goToList">← 목록</button>
+        <button class="btn btn--ghost btn--sm" type="button" @click="goToList">
+          <AppIcon name="arrow-left" :size="14" />
+          목록
+        </button>
         <h1>{{ isNew ? '새 주간보고' : '주간보고 수정' }}</h1>
         <span v-if="dirty" class="badge badge--warn">저장 안 됨</span>
         <span v-else-if="!isNew" class="badge badge--ok">저장됨</span>

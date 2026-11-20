@@ -25,6 +25,8 @@ import {
 export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
   const caret = ref({ line: 1, column: 1 })
   const selectionLength = ref(0)
+  /** 고른 범위. 찾기 막대가 '몇 번째 것을 보고 있는지' 셀 때 쓴다. */
+  const selection = ref({ start: 0, end: 0 })
 
   // ── 찾기 / 바꾸기 ────────────────────────────────────────
   const finder = ref({ open: false, query: '', replacement: '', matchCase: false, message: '' })
@@ -36,6 +38,7 @@ export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
     if (!area) return
     caret.value = caretPosition(area.value, area.selectionStart)
     selectionLength.value = area.selectionEnd - area.selectionStart
+    selection.value = { start: area.selectionStart, end: area.selectionEnd }
   }
 
   /** 되돌리기 기록을 지키며 글자를 넣는다. 지원하지 않는 브라우저면 직접 바꾼다. */
@@ -374,6 +377,7 @@ export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
 
   return {
     status,
+    selection,
     finder,
     sync,
     onKeydown,

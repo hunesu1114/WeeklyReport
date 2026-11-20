@@ -127,7 +127,8 @@ function applyDefaults() {
           title="보고일 기준 기본값(금주 = 보고일-7 ~ 보고일-1)으로 되돌립니다"
           @click="applyDefaults"
         >
-          ↺ 기간 자동 계산
+          <AppIcon name="refresh" :size="13" />
+          기간 자동 계산
         </button>
       </div>
 

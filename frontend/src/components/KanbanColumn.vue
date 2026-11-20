@@ -91,22 +91,21 @@ function onDragEnd() {
     @drop.prevent="onDrop"
   >
     <header class="col__head">
-      <div class="col__title">
-        <span class="col__dot" aria-hidden="true"></span>
-        <strong>{{ meta.label }}</strong>
-        <span class="col__count">{{ cards.length }}</span>
-      </div>
+      <h2 class="col__title">{{ meta.name }}</h2>
+      <span class="col__key">{{ meta.label }}</span>
+      <span class="col__count">{{ cards.length }}</span>
+      <span class="col__spacer"></span>
       <button
         v-if="!readOnly"
-        class="btn btn--ghost btn--icon"
+        class="btn btn--icon col__add"
         type="button"
-        :title="`${meta.label} 에 카드 추가`"
+        :title="`${meta.name}에 카드 추가`"
+        :aria-label="`${meta.name}에 카드 추가`"
         @click="emit('add', status)"
       >
-        ＋
+        <AppIcon name="plus" :size="14" />
       </button>
     </header>
-    <p class="col__hint tiny muted">{{ meta.hint }}</p>
 
     <div ref="listRef" class="col__list">
       <div v-if="dropIndex === 0" class="col__marker" aria-hidden="true"></div>
@@ -140,66 +139,66 @@ function onDragEnd() {
 </template>
 
 <style scoped>
+/*
+ * 칸은 상자가 아니라 머리 위의 선 한 줄로 나눈다. 회색 상자 네 개를 나란히
+ * 세우면 카드보다 상자가 먼저 보인다. 진행 중만 키컬러 선이다.
+ */
 .col {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  transition: border-color 0.12s, background-color 0.12s;
+  padding: 0 0 8px;
+  border-top: 2px solid var(--line-strong);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  transition: background-color 0.12s;
+}
+
+.col--info {
+  border-top-color: var(--text-2);
+}
+
+.col--violet {
+  border-top-color: var(--brand);
 }
 
 .col--over {
-  border-color: var(--brand);
   background: var(--brand-soft);
 }
 
 .col__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  height: 42px;
 }
 
 .col__title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.col__key {
+  color: var(--text-3);
+  font-family: var(--font-num);
+  font-size: 10.5px;
   letter-spacing: 0.04em;
 }
 
-.col__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-4);
-}
-
-.col--info .col__dot {
-  background: var(--info);
-}
-.col--violet .col__dot {
-  background: var(--violet);
-}
-.col--ok .col__dot {
-  background: var(--brand);
-}
-
 .col__count {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
   color: var(--text-3);
-  font-size: 11px;
-  font-weight: 600;
+  font-family: var(--font-num);
+  font-size: 12px;
 }
 
-.col__hint {
-  margin: 2px 0 10px 15px;
+.col__spacer {
+  flex: 1;
+}
+
+.col__add {
+  width: 26px;
+  height: 26px;
 }
 
 /*
@@ -215,7 +214,7 @@ function onDragEnd() {
 .col__list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
   min-height: 0;
   max-height: var(--col-list-max, clamp(220px, calc(100vh - 430px), 760px));
@@ -260,7 +259,7 @@ function onDragEnd() {
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: 12px;
 }
 

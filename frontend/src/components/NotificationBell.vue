@@ -104,7 +104,7 @@ async function readAll() {
       :aria-expanded="open"
       @click="toggle"
     >
-      <span aria-hidden="true">🔔</span>
+      <AppIcon name="bell" :size="16" />
       <span v-if="total" class="bell__count">{{ total > 99 ? '99+' : total }}</span>
       <span class="sr-only">알림 {{ total }}건</span>
     </button>
@@ -227,42 +227,49 @@ async function readAll() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--line);
+  width: 32px;
+  height: 32px;
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  transition: border-color 0.12s, background 0.12s;
+  background: transparent;
+  color: var(--text-2);
+  transition: background 0.12s, color 0.12s;
 }
 
 .bell__btn:hover {
   background: var(--surface-hover);
-  border-color: var(--line-strong);
+  color: var(--text);
 }
 
-.bell__btn--alert {
-  border-color: var(--warn-border);
-  background: var(--warn-soft);
-}
-
-.bell__btn--urgent {
-  border-color: var(--danger-border);
-  background: var(--danger-soft);
-}
-
+/*
+ * 상태는 버튼 바탕이 아니라 숫자 꼬리표 색으로만 알린다.
+ * 버튼 전체가 노랗고 빨개지면 머리글에서 혼자 경고판처럼 튄다.
+ */
 .bell__count {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  top: 3px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: var(--danger-bright);
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--surface);
+  color: var(--surface);
+  font-family: var(--font-num);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.bell__btn--alert .bell__count {
+  background: var(--warn);
+  color: var(--surface);
+}
+
+.bell__btn--urgent .bell__count {
+  background: var(--danger);
   color: var(--on-danger);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 18px;
 }
 
 .pop {
