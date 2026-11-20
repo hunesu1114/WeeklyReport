@@ -118,12 +118,10 @@ function logout() {
 <template>
   <div class="shell">
     <header v-if="showChrome" class="topbar">
-      <RouterLink to="/" class="brand" title="주간보고/칸반">
-        <BrandMark :size="30" />
-        <span class="brand__text">
-          <strong>주간보고/칸반</strong>
-          <em>Weekly Report &amp; Kanban</em>
-        </span>
+      <!-- MW 는 My Work 의 줄임말. 풀어 쓴 이름은 손을 올렸을 때만 보인다 -->
+      <RouterLink to="/" class="brand" title="MW · My Work">
+        <BrandMark :size="22" />
+        <span class="brand__text">MW</span>
       </RouterLink>
 
       <nav class="topnav">
@@ -238,27 +236,16 @@ function logout() {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--text);
   text-decoration: none;
 }
 
 .brand__text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.brand__text strong {
-  font-size: 14px;
-  letter-spacing: -0.02em;
-}
-
-.brand__text em {
-  font-style: normal;
-  font-size: 10px;
-  color: var(--text-4);
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .topnav {
@@ -460,10 +447,6 @@ function logout() {
 }
 
 @media (max-width: 720px) {
-  .brand__text {
-    display: none;
-  }
-
   .topbar {
     gap: 10px;
     padding: 0 12px;

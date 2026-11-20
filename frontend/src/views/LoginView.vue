@@ -88,10 +88,10 @@ async function submit() {
   <div class="login">
     <div class="login__card card">
       <div class="login__brand">
-        <BrandMark :size="40" />
+        <BrandMark :size="32" />
         <div>
           <h1>{{ title }}</h1>
-          <p class="tiny muted">주간보고/칸반</p>
+          <p class="tiny muted">MW · My Work</p>
         </div>
       </div>
 

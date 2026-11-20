@@ -8,7 +8,7 @@ import MemoView from '@/views/MemoView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 /** 브라우저 탭에 항상 붙는 앱 이름. */
-export const APP_NAME = '주간보고/칸반'
+export const APP_NAME = 'MW'
 
 const router = createRouter({
   history: createWebHistory(),
