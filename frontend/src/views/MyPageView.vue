@@ -2,15 +2,18 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { authApi, kanbanApi, profileApi, teamApi } from '@/api/client'
+import { authApi, kanbanApi, memoApi, profileApi, teamApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useKanbanStore } from '@/stores/kanban'
+import { useMemoStore } from '@/stores/memo'
 import { useToast } from '@/composables/useToast'
 import { resizeAvatar } from '@/utils/image'
+import { formatBytes } from '@/utils/memoImage'
 import { ROLE_META, timeAgo } from '@/utils/team'
 
 const auth = useAuthStore()
 const kanban = useKanbanStore()
+const memoStore = useMemoStore()
 const toast = useToast()
 const router = useRouter()
 
@@ -148,6 +151,45 @@ async function leave(project) {
 
 function openBoard(project) {
   router.push({ name: 'kanban-board', params: { projectId: project.id } })
+}
+
+// ── 메모 그림 공간 ──────────────────────────────────────
+const usage = ref(null)
+const loadingUsage = ref(true)
+
+onMounted(loadUsage)
+
+async function loadUsage() {
+  loadingUsage.value = true
+  try {
+    usage.value = await memoApi.imageUsage()
+  } catch (error) {
+    toast.error(`그림 사용량을 불러오지 못했습니다. ${error.message}`)
+  } finally {
+    loadingUsage.value = false
+  }
+}
+
+/** 쓴 비율(0~1). 한도가 0 이면(설정 실수) 다 쓴 것으로 본다 */
+const usedRatio = computed(() => {
+  const u = usage.value
+  if (!u) return 0
+  return u.quotaBytes > 0 ? Math.min(1, u.bytes / u.quotaBytes) : 1
+})
+
+/** 막대 색. 80% 를 넘으면 노랑, 95% 를 넘으면 빨강 — 그때부터 큰 사진 몇 장에 막힌다 */
+const usageTone = computed(() => (usedRatio.value >= 0.95 ? 'bad' : usedRatio.value >= 0.8 ? 'warn' : 'ok'))
+
+const usedPercent = computed(() => {
+  const pct = usedRatio.value * 100
+  if (pct > 0 && pct < 1) return '1% 미만'
+  return `${Math.round(pct)}%`
+})
+
+/** 메모 화면은 마지막에 연 메모를 연다. 그 자리에 이 메모를 적어 두고 넘어간다 */
+function openMemo(item) {
+  memoStore.rememberMemo(item.id)
+  router.push({ name: 'memos' })
 }
 </script>
 
@@ -338,6 +380,82 @@ function openBoard(project) {
         </p>
       </div>
     </section>
+
+    <!-- 메모 그림 공간 -->
+    <section class="card">
+      <div class="card__head">
+        <div>
+          <h2 class="card__title">메모 그림</h2>
+          <p class="tiny muted my__hint">메모에 붙여넣은 그림이 쓰는 공간입니다.</p>
+        </div>
+      </div>
+
+      <div class="card__body">
+        <p v-if="loadingUsage && !usage" class="my__state muted tiny">불러오는 중…</p>
+        <template v-else-if="usage">
+          <div class="space">
+            <p class="space__head">
+              <strong class="num">{{ formatBytes(usage.bytes) || '0KB' }}</strong>
+              <span class="muted">/ {{ formatBytes(usage.quotaBytes) }}</span>
+              <span class="space__pct num" :class="`space__pct--${usageTone}`">{{ usedPercent }}</span>
+            </p>
+            <div
+              class="space__bar"
+              role="meter"
+              aria-label="메모 그림이 쓰는 공간"
+              aria-valuemin="0"
+              :aria-valuemax="usage.quotaBytes"
+              :aria-valuenow="usage.bytes"
+              :aria-valuetext="`${formatBytes(usage.bytes) || '0KB'} / ${formatBytes(usage.quotaBytes)}, ${usedPercent}`"
+            >
+              <span
+                class="space__fill"
+                :class="`space__fill--${usageTone}`"
+                :style="{ width: `${Math.max(usedRatio * 100, usage.bytes ? 0.6 : 0)}%` }"
+              ></span>
+            </div>
+            <p class="tiny muted space__facts">
+              그림 <span class="num">{{ usage.count }}</span>장 ·
+              한 장 {{ formatBytes(usage.maxBytes) }}, 메모 하나에 {{ usage.maxPerMemo }}장까지
+            </p>
+            <p v-if="usage.orphanCount" class="tiny space__soon">
+              본문에서 뺀 그림 <span class="num">{{ usage.orphanCount }}</span>장({{ formatBytes(usage.orphanBytes) }})은
+              하루 안에 지워지고 그만큼 공간이 돌아옵니다.
+            </p>
+          </div>
+
+          <template v-if="usage.memos.length">
+            <p class="eyebrow space__label">그림을 많이 쓰는 메모</p>
+            <ul class="space__memos">
+              <li v-for="item in usage.memos" :key="item.id" class="space__memo">
+                <button
+                  v-if="!item.trashed"
+                  class="space__title"
+                  type="button"
+                  :title="`'${item.title}' 메모 열기`"
+                  @click="openMemo(item)"
+                >
+                  {{ item.title }}
+                </button>
+                <span v-else class="space__title space__title--off">
+                  {{ item.title }}
+                  <span class="badge">휴지통</span>
+                </span>
+                <span class="tiny muted num space__size">
+                  {{ item.images }}장 · {{ formatBytes(item.bytes) }}
+                </span>
+              </li>
+            </ul>
+            <p v-if="usage.memos.some((m) => m.trashed)" class="tiny muted my__note">
+              휴지통에 든 메모의 그림도 공간을 씁니다. 휴지통을 비우면 하루 뒤 공간이 돌아옵니다.
+            </p>
+          </template>
+          <p v-else-if="!usage.count" class="tiny muted my__note">
+            아직 메모에 넣은 그림이 없습니다. 메모에서 Ctrl+V 로 붙여넣거나 끌어다 놓으면 됩니다.
+          </p>
+        </template>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -485,6 +603,132 @@ function openBoard(project) {
 
 .my__pname:hover strong {
   color: var(--brand-strong);
+}
+
+/* ---------- 메모 그림 공간 ---------- */
+.space {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.space__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.space__head strong {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.space__pct {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.space__pct--ok {
+  color: var(--text-3);
+}
+
+.space__pct--warn {
+  color: var(--warn);
+}
+
+.space__pct--bad {
+  color: var(--danger);
+}
+
+.space__bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-sel);
+}
+
+.space__fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--brand);
+  transition: width 0.3s ease;
+}
+
+.space__fill--warn {
+  background: var(--warn);
+}
+
+.space__fill--bad {
+  background: var(--danger);
+}
+
+.space__facts,
+.space__soon {
+  margin: 0;
+}
+
+.space__soon {
+  color: var(--text-2);
+}
+
+.space__label {
+  margin: 18px 0 6px;
+}
+
+.space__memos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.space__memo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+}
+
+.space__memo:hover {
+  background: var(--surface-hover);
+}
+
+.space__title {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.space__title:hover {
+  color: var(--brand-strong);
+}
+
+.space__title--off {
+  color: var(--text-3);
+}
+
+.space__size {
+  flex: none;
 }
 
 @media (max-width: 640px) {

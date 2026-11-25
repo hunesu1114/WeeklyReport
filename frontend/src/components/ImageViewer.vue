@@ -7,7 +7,7 @@
  * 그림 자체를 지우는 버튼은 두지 않는다. 아무도 가리키지 않는 그림은 하루 뒤 서버가 치운다.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { formatBytes, typeLabel } from '@/utils/memoImage'
+import { describeImage, typeLabel } from '@/utils/memoImage'
 
 const props = defineProps({
   /** [{ id, alt, n, entry }] — 그림 줄과 같은 것 */
@@ -27,15 +27,7 @@ const entry = computed(() => item.value?.entry ?? null)
 const src = computed(() => entry.value?.url || entry.value?.full || entry.value?.preview || null)
 const ready = computed(() => entry.value?.status === 'ready' && entry.value?.url)
 
-const info = computed(() => {
-  const e = entry.value
-  if (!e) return ''
-  const parts = []
-  if (e.width && e.height) parts.push(`${e.width}×${e.height}`)
-  if (typeLabel(e.contentType)) parts.push(typeLabel(e.contentType))
-  if (e.byteSize) parts.push(formatBytes(e.byteSize))
-  return parts.join(' · ')
-})
+const info = computed(() => describeImage(entry.value))
 
 const status = computed(() => {
   const e = entry.value

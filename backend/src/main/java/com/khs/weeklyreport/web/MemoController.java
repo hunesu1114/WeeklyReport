@@ -3,6 +3,7 @@ package com.khs.weeklyreport.web;
 import com.khs.weeklyreport.service.MemoImageService;
 import com.khs.weeklyreport.service.MemoService;
 import com.khs.weeklyreport.web.dto.MemoDtos;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -154,17 +156,38 @@ public class MemoController {
         return imageService.upload(id, imageId, file, thumb, width, height, name);
     }
 
+    /** 내 그림이 쓰는 공간과 그림을 많이 쓰는 메모. 마이페이지가 부른다. */
+    @GetMapping("/images/usage")
+    public MemoDtos.ImageUsage imageUsage() {
+        return imageService.usage();
+    }
+
     /** 메모를 txt 로 내려받는다. 줄 끝은 메모장이 읽을 수 있게 CRLF 로 나간다. */
     @GetMapping("/{id}/export")
     public ResponseEntity<byte[]> export(@PathVariable Long id) {
         MemoService.TextFile file = memoService.exportText(id);
-        ContentDisposition disposition = ContentDisposition.attachment()
-                .filename(file.filename(), StandardCharsets.UTF_8)
-                .build();
         return ResponseEntity.ok()
                 .contentType(TEXT_UTF8)
-                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CONTENT_DISPOSITION, attachment(file.filename()))
                 .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, HttpHeaders.CONTENT_DISPOSITION)
                 .body(file.content());
+    }
+
+    /**
+     * 본문 txt 와 그림을 zip 하나로 내려받는다. 그림이 많으면 수십 MB 라 한 번에 만들어 두지 않고
+     * 흘려 보낸다. 메모가 없으면 쓰기 전에 알 수 있게 준비를 먼저 한다 — 그래야 오류가 JSON 으로 간다.
+     */
+    @GetMapping("/{id}/export/zip")
+    public void exportZip(@PathVariable Long id, HttpServletResponse response) throws IOException {
+        MemoImageService.ZipPlan plan = imageService.prepareZip(id);
+        response.setContentType("application/zip");
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, attachment(plan.filename()));
+        response.setHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, HttpHeaders.CONTENT_DISPOSITION);
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+        imageService.writeZip(plan, response.getOutputStream());
+    }
+
+    private static String attachment(String filename) {
+        return ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString();
     }
 }

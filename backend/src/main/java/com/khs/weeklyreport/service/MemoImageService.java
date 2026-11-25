@@ -18,14 +18,21 @@ import org.springframework.util.unit.DataSize;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.zip.CRC32;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * 메모 그림: 올리기 · 내려주기 · 메모가 가리키는 그림 맞추기 · 정리.
@@ -45,6 +52,12 @@ public class MemoImageService {
 
     /** 가로 · 세로 상한. 브라우저가 2000px 로 줄여 보내므로 넉넉하다. 화면 배치에만 쓰는 값이다. */
     private static final int MAX_SIDE = 20_000;
+
+    /** 마이페이지에 보일 '그림을 많이 쓰는 메모' 수. */
+    private static final int HEAVY_MEMOS = 5;
+
+    /** zip 안 그림 파일 이름에 붙일 설명 길이(글자). 넘으면 자른다. */
+    private static final int SLUG_LENGTH = 40;
 
     private final MemoImageRepository imageRepository;
     private final MemoImageBlobRepository blobRepository;
@@ -246,6 +259,146 @@ public class MemoImageService {
         imageRepository.deleteOrphansBefore(ownerId, now.minus(ORPHAN_GRACE));
     }
 
+    // ── 사용량 ───────────────────────────────────────────────
+
+    /**
+     * 내 그림이 쓰는 공간. 정리를 먼저 한다 — 그래야 '하루 안에 지워질 것' 숫자가
+     * 화면을 연 시각과 맞고, 이미 지울 때가 지난 것이 쓰는 공간으로 잡히지 않는다.
+     */
+    @Transactional
+    public MemoDtos.ImageUsage usage() {
+        Long ownerId = currentUser.requireId();
+        collectGarbage(ownerId);
+
+        List<MemoDtos.MemoImageUsage> memos = imageRepository.heaviestMemos(ownerId, HEAVY_MEMOS).stream()
+                .map(row -> new MemoDtos.MemoImageUsage(row.getMemoId(), row.getTitle(),
+                        Boolean.TRUE.equals(row.getTrashed()), row.getImages(), row.getBytes()))
+                .toList();
+        return new MemoDtos.ImageUsage(
+                imageRepository.countByOwnerId(ownerId),
+                imageRepository.usedBytes(ownerId),
+                limits.quotaBytes(),
+                limits.maxBytes(),
+                limits.maxPerMemo(),
+                imageRepository.countByOwnerIdAndOrphanedAtIsNotNull(ownerId),
+                imageRepository.orphanedBytes(ownerId),
+                memos);
+    }
+
+    // ── zip 내보내기 ─────────────────────────────────────────
+
+    /**
+     * zip 에 담을 것.
+     *
+     * @param filename 내려받을 이름 ({@code 제목.zip})
+     * @param textName zip 안의 본문 파일 이름 ({@code 제목.txt})
+     * @param text     본문. 토큰은 zip 안의 그림 경로를 가리키게 바뀌어 있다
+     */
+    public record ZipPlan(String filename, String textName, byte[] text, List<ZipImage> images) {
+    }
+
+    public record ZipImage(String path, String imageId) {
+    }
+
+    /**
+     * 메모 하나를 본문과 그림으로 묶을 준비를 한다. 바이트는 아직 읽지 않는다.
+     *
+     * <p>그림은 {@code images/01-설명.png} 로 들어간다. 번호는 그림 줄과 같다 — 본문에 처음 나온
+     * 순서이고, 찾을 수 없는 그림도 번호 하나를 차지한다(화면의 '그림 3' 이 파일 03 이다).
+     * 본문 토큰은 {@code ![설명](images/01-설명.png)} 로 바뀌어 마크다운 편집기에서는 그림이
+     * 바로 보인다. 찾을 수 없는 그림은 txt 내보내기처럼 {@code [그림: 설명]} 으로 남긴다.
+     */
+    @Transactional(readOnly = true)
+    public ZipPlan prepareZip(Long memoId) {
+        Long ownerId = currentUser.requireId();
+        Memo memo = memoRepository.findByIdAndOwnerId(memoId, ownerId)
+                .orElseThrow(() -> new NotFoundException("메모를 찾을 수 없습니다. id=" + memoId));
+        String content = memo.getContent() == null ? "" : memo.getContent();
+
+        // 같은 그림이 여러 번 나오면 처음 나온 자리의 설명으로 이름을 짓는다
+        Map<String, String> altOf = new LinkedHashMap<>();
+        for (MemoImageTokens.Token token : MemoImageTokens.tokens(content)) {
+            altOf.putIfAbsent(token.id(), token.alt());
+        }
+        Map<String, MemoImage> found = altOf.isEmpty() ? Map.of()
+                : imageRepository.findByOwnerIdAndIdIn(ownerId, altOf.keySet()).stream()
+                        .collect(Collectors.toMap(MemoImage::getId, Function.identity()));
+
+        String numberFormat = "%0" + Math.max(2, String.valueOf(altOf.size()).length()) + "d";
+        Map<String, String> paths = new HashMap<>();
+        List<ZipImage> images = new ArrayList<>();
+        int n = 0;
+        for (Map.Entry<String, String> entry : altOf.entrySet()) {
+            n++;
+            MemoImage image = found.get(entry.getKey());
+            if (image == null) continue;
+            String name = slug(entry.getValue());
+            if (name.isEmpty()) name = slug(stem(image.getOriginalName()));
+            String path = "images/" + numberFormat.formatted(n) + (name.isEmpty() ? "" : "-" + name)
+                    + extension(image.getContentType());
+            paths.put(image.getId(), path);
+            images.add(new ZipImage(path, image.getId()));
+        }
+
+        String body = MemoImageTokens.replace(content, (alt, id) -> {
+            String path = paths.get(id);
+            return path == null ? MemoImageTokens.label(alt) : "![" + alt + "](" + path + ")";
+        });
+        String base = MemoService.safeFilename(memo.getTitle());
+        return new ZipPlan(base + ".zip", base + ".txt",
+                MemoService.windowsLines(body).getBytes(StandardCharsets.UTF_8), images);
+    }
+
+    /**
+     * zip 을 흘려 보낸다. 그림을 한 장씩 읽어 바로 쓰므로 그림이 50장이어도 서버 메모리에
+     * 한꺼번에 올리지 않는다. 트랜잭션으로 묶지 않는다 — 느린 망으로 내려받는 동안 DB 연결을
+     * 붙잡지 않게, 한 장마다 짧게 읽는다.
+     *
+     * <p>그림은 압축하지 않고 담는다(STORED). PNG · JPG · WEBP 는 이미 압축돼 있어 더 줄지 않는다.
+     * 파일 이름은 UTF-8 로 쓰고 그 표시도 단다 — 한글 이름이 윈도 탐색기에서 깨지지 않는다.
+     */
+    public void writeZip(ZipPlan plan, OutputStream out) throws IOException {
+        ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8);
+        zip.putNextEntry(new ZipEntry(plan.textName()));
+        zip.write(plan.text());
+        zip.closeEntry();
+
+        for (ZipImage image : plan.images()) {
+            byte[] bytes = blobRepository.findBytes(image.imageId());
+            if (bytes == null) continue; // 준비한 뒤 그 사이에 지워졌다
+            ZipEntry entry = new ZipEntry(image.path());
+            entry.setMethod(ZipEntry.STORED);
+            entry.setSize(bytes.length);
+            entry.setCompressedSize(bytes.length);
+            CRC32 crc = new CRC32();
+            crc.update(bytes);
+            entry.setCrc(crc.getValue());
+            zip.putNextEntry(entry);
+            zip.write(bytes);
+            zip.closeEntry();
+        }
+        // 닫지는 않는다. 응답 스트림은 서블릿 컨테이너가 닫는다
+        zip.finish();
+        zip.flush();
+    }
+
+    /**
+     * zip 안 파일 이름에 쓸 말. 경로나 마크다운 주소를 깨는 글자는 걷어 내고 빈칸은 - 로 잇는다.
+     * 괄호도 뺀다 — {@code ![설명](images/01-버튼(가려짐).png)} 는 편집기마다 다르게 읽는다.
+     */
+    static String slug(String text) {
+        if (text == null) return "";
+        String s = text.replaceAll("[\\p{Cntrl}\\\\/:*?\"<>|#%()\\[\\]{}]", " ")
+                .strip()
+                .replaceAll("\\s+", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^[-.]+|[-.]+$", "");
+        if (s.codePointCount(0, s.length()) > SLUG_LENGTH) {
+            s = s.substring(0, s.offsetByCodePoints(0, SLUG_LENGTH)).replaceAll("[-.]+$", "");
+        }
+        return s;
+    }
+
     // ── 내부 ─────────────────────────────────────────────────
 
     private MemoDtos.ImageView view(MemoImage image, long expiresAt) {
@@ -308,18 +461,26 @@ public class MemoImageService {
 
     /** 내려받을 이름. 형식이 바뀌었을 수 있으므로(PNG → WEBP) 확장자는 실제 형식으로 맞춘다. */
     private static String downloadName(MemoImage image) {
-        String ext = switch (image.getContentType()) {
+        String stem = stem(image.getOriginalName());
+        if (stem == null || stem.isBlank()) stem = "그림-" + image.getId();
+        return stem + extension(image.getContentType());
+    }
+
+    private static String extension(String contentType) {
+        return switch (contentType == null ? "" : contentType) {
             case "image/png" -> ".png";
             case "image/jpeg" -> ".jpg";
             case "image/gif" -> ".gif";
             case "image/webp" -> ".webp";
             default -> "";
         };
-        String name = image.getOriginalName();
-        if (name == null || name.isBlank()) return "그림-" + image.getId() + ext;
+    }
+
+    /** 확장자를 뗀 파일 이름. */
+    private static String stem(String name) {
+        if (name == null) return null;
         int dot = name.lastIndexOf('.');
-        String stem = dot > 0 ? name.substring(0, dot) : name;
-        return stem + ext;
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     private static String human(long bytes) {

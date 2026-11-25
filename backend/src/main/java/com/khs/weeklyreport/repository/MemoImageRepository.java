@@ -26,6 +26,43 @@ public interface MemoImageRepository extends JpaRepository<MemoImage, String> {
     @Query("select coalesce(sum(i.byteSize), 0) from MemoImage i where i.ownerId = :ownerId")
     long usedBytes(@Param("ownerId") Long ownerId);
 
+    long countByOwnerId(Long ownerId);
+
+    // ── 사용량 ───────────────────────────────────────────────
+
+    /** 아무도 가리키지 않아 곧 지워질 것. 본문에서 뺐거나, 올렸는데 아직 저장 전인 그림이다. */
+    long countByOwnerIdAndOrphanedAtIsNotNull(Long ownerId);
+
+    @Query("select coalesce(sum(i.byteSize), 0) from MemoImage i where i.ownerId = :ownerId and i.orphanedAt is not null")
+    long orphanedBytes(@Param("ownerId") Long ownerId);
+
+    /** 메모 하나가 가리키는 그림. 같은 그림을 두 메모가 가리키면 두 곳에 다 센다. */
+    interface MemoUsageRow {
+        Long getMemoId();
+
+        String getTitle();
+
+        Boolean getTrashed();
+
+        Long getImages();
+
+        Long getBytes();
+    }
+
+    /** 그림을 많이 쓰는 메모. 공간이 모자랄 때 어디를 비울지 보라고 마이페이지에 보인다. */
+    @Query(nativeQuery = true, value = """
+            select m.id as "memoId", m.title as "title", (m.deleted_at is not null) as "trashed",
+                   count(*) as "images", coalesce(sum(i.byte_size), 0) as "bytes"
+            from memo_image_ref r
+            join memo_image i on i.id = r.image_id
+            join memo m on m.id = r.memo_id
+            where i.owner_id = :ownerId
+            group by m.id, m.title, m.deleted_at
+            order by "bytes" desc, m.id desc
+            limit :limit
+            """)
+    List<MemoUsageRow> heaviestMemos(@Param("ownerId") Long ownerId, @Param("limit") int limit);
+
     /**
      * 이 메모의 그림 수. 이 메모가 가리키는 것과, 이 메모에 올렸는데 아직 아무도 가리키지 않는 것
      * (저장 전이거나 방금 지운 것)을 함께 센다.

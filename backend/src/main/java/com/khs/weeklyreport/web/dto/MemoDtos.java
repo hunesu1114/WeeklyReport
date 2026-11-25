@@ -155,6 +155,28 @@ public final class MemoDtos {
     }
 
     /**
+     * 그림이 쓰는 공간. 마이페이지에 보인다.
+     *
+     * @param bytes        지금 쓰는 바이트. 한도를 잴 때 세는 것과 같다(곧 지워질 것도 든다).
+     * @param orphanCount  아무도 가리키지 않아 하루 안에 지워질 그림 수
+     * @param memos        그림을 많이 쓰는 메모. 바이트가 큰 순서
+     */
+    public record ImageUsage(
+            long count,
+            long bytes,
+            long quotaBytes,
+            long maxBytes,
+            int maxPerMemo,
+            long orphanCount,
+            long orphanBytes,
+            List<MemoImageUsage> memos
+    ) {
+    }
+
+    public record MemoImageUsage(Long id, String title, boolean trashed, long images, long bytes) {
+    }
+
+    /**
      * 화면이 처음에 한 번에 받아가는 것. 폴더 트리와 메모 목록을 따로 부르지 않는다.
      * 휴지통도 함께 싣는다 — 사이드바가 몇 장 들었는지 늘 보여준다.
      */

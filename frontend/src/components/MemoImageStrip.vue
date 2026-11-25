@@ -7,7 +7,7 @@
  * 커서가 토큰 줄에 있으면 그 칸에 테두리가 생기고 아래 줄에 이름과 크기가 나온다.
  */
 import { computed } from 'vue'
-import { formatBytes, typeLabel } from '@/utils/memoImage'
+import { describeImage as info } from '@/utils/memoImage'
 
 const props = defineProps({
   /** [{ id, alt, n, entry }] — entry 가 없으면 지워졌거나 남의 그림이다 */
@@ -23,15 +23,6 @@ const current = computed(() => props.items.find((item) => item.id === props.curr
 function stateOf(item) {
   if (!item.entry) return 'missing'
   return item.entry.status
-}
-
-function info(entry) {
-  if (!entry) return ''
-  const parts = []
-  if (entry.width && entry.height) parts.push(`${entry.width}×${entry.height}`)
-  if (typeLabel(entry.contentType)) parts.push(typeLabel(entry.contentType))
-  if (entry.byteSize) parts.push(formatBytes(entry.byteSize))
-  return parts.join(' · ')
 }
 
 function ariaOf(item) {

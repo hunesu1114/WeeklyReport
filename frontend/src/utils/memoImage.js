@@ -103,10 +103,21 @@ export function altFromFile(file) {
 
 export function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return ''
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+  // 300MB · 5MB 처럼 딱 떨어지는 한도는 .0 을 붙이지 않는다
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1).replace(/\.0$/, '')}MB`
   return `${Math.max(1, Math.round(bytes / 1024))}KB`
 }
 
 export function typeLabel(contentType) {
   return { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[contentType] ?? ''
+}
+
+/** 그림 줄 · 크게 보기 · 읽기 모드 밑에 붙는 한 줄. '2000×1250 · png · 412KB' */
+export function describeImage(entry) {
+  if (!entry) return ''
+  const parts = []
+  if (entry.width && entry.height) parts.push(`${entry.width}×${entry.height}`)
+  if (typeLabel(entry.contentType)) parts.push(typeLabel(entry.contentType))
+  if (entry.byteSize) parts.push(formatBytes(entry.byteSize))
+  return parts.join(' · ')
 }

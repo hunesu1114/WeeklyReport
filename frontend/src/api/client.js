@@ -306,6 +306,20 @@ export const memoApi = {
     saveBlob(response.data, filename)
     return filename
   },
+
+  /**
+   * 본문 txt 와 그림을 zip 하나로 내려받는다. 그림은 images/01-설명.png 로 들어가고
+   * 본문 토큰은 그 경로를 가리키게 바뀐다. 그림이 많으면 수십 MB 라 넉넉히 기다린다.
+   */
+  async exportZip(id) {
+    const response = await http.get(`/memos/${id}/export/zip`, { responseType: 'blob', timeout: 300000 })
+    const filename = parseFilename(response.headers['content-disposition']) || `memo-${id}.zip`
+    saveBlob(response.data, filename)
+    return filename
+  },
+
+  /** 내 그림이 쓰는 공간. { count, bytes, quotaBytes, maxBytes, maxPerMemo, orphanCount, orphanBytes, memos } */
+  imageUsage: () => http.get('/memos/images/usage').then((r) => r.data),
 }
 
 export const metaApi = {

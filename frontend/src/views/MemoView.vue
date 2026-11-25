@@ -15,6 +15,7 @@ import {
   IMAGE_LIMITS,
   IMAGE_TYPES,
   altFromFile,
+  describeImage,
   findTokens,
   formatBytes,
   imageCount,
@@ -56,6 +57,7 @@ const SHORTCUTS = [
   ['Ctrl+N', '새 메모'],
   ['Ctrl+S', '바로 저장 (멈추면 알아서 저장된다)'],
   ['Ctrl+Shift+S', 'txt 로 내보내기'],
+  ['Ctrl+E', '편집 / 읽기 (글과 그림을 이어 보기)'],
   ['Ctrl+F / Ctrl+H', '찾기 / 바꾸기'],
   ['F3 / Shift+F3', '다음 찾기 / 이전 찾기'],
   ['Ctrl+G', '줄 번호로 이동'],
@@ -127,6 +129,16 @@ const gallery = useMemoImages()
 const viewerIndex = ref(null)
 /** 편집기 위로 파일을 끌고 왔다. 그림 몇 장인지(모르면 0). 아니면 null */
 const dragging = ref(null)
+/** zip 을 묶어 받는 중. 두 번 누르지 않게 막는다 */
+const zipping = ref(false)
+
+/**
+ * 보기 방식. 'edit' 은 메모장, 'read' 는 글 사이에 그림을 크게 이어 보여 준다.
+ * 메모를 옮겨 다녀도 그대로 둔다 — 여러 메모를 차례로 읽는 중일 수 있다.
+ */
+const mode = ref('edit')
+const reading = computed(() => mode.value === 'read')
+const reader = ref(null)
 
 // ── 목록 머리 ───────────────────────────────────────────
 
@@ -335,6 +347,11 @@ function insertImages(fileList, { atLineEnd }) {
   if (!memo.value || trashed.value || !area) return
 
   const all = [...(fileList ?? [])]
+  // 숨은 본문 칸에는 글자를 넣을 수 없다(포커스를 못 받는다). 편집으로 돌아가서 넣는다
+  if (reading.value) {
+    whenEditing(() => insertImages(all, { atLineEnd }))
+    return
+  }
   const files = all.filter(isImageFile)
   if (!files.length) {
     toast.error('그림 파일만 넣을 수 있습니다. PNG, JPG, WEBP, GIF')
@@ -410,6 +427,7 @@ function blockStrayDrop(event) {
 
 function pickImages() {
   if (!memo.value || trashed.value) return
+  // 파일 창은 누른 그 자리에서 열어야 한다(브라우저가 사용자 동작 안에서만 연다). 넣을 때 편집으로 돌아간다
   fileInput.value?.click()
 }
 
@@ -438,13 +456,13 @@ function openViewer(id) {
   if (at >= 0) viewerIndex.value = at
 }
 
-/** 그림의 토큰 줄로 돌아가 토큰을 고른다. 그림 줄에서 그 칸에 테두리가 생긴다. */
+/** 그림의 토큰 줄로 돌아가 토큰을 고른다. 그림 줄에서 그 칸에 테두리가 생긴다. 읽는 중이면 편집으로. */
 function findInBody(id) {
   viewerIndex.value = null
   const token = tokens.value.find((t) => t.id === id)
   if (!token) return
   mobilePane.value = 'editor'
-  nextTick(() => notepad.selectRange(token.start, token.end))
+  whenEditing(() => notepad.selectRange(token.start, token.end))
 }
 
 /**
@@ -455,6 +473,11 @@ function findInBody(id) {
 function removeFromBody(id) {
   const area = editor.value
   if (!memo.value || trashed.value || !area) return
+  // 본문 칸에서 바꿔야 Ctrl+Z 로 돌아온다. 숨어 있으면 포커스를 못 받으니 편집으로 돌아가서 뺀다
+  if (reading.value) {
+    whenEditing(() => removeFromBody(id))
+    return
+  }
   const value = area.value
   const found = tokens.value.filter((t) => t.id === id)
   if (!found.length) return
@@ -500,6 +523,130 @@ function removeFromBody(id) {
       notepad.replaceRange(from, from + middle.length, original)
     },
   })
+}
+
+// ── 읽기 모드 ───────────────────────────────────────────
+
+/**
+ * 편집과 읽기를 오간다. 본문 칸은 숨기기만 하고 없애지 않는다 — 커서 자리와 되돌리기 기록이
+ * 그대로 남아, 돌아오면 쓰던 자리에서 이어 쓴다.
+ */
+function setMode(next) {
+  if (mode.value === next || !memo.value) return
+  mode.value = next
+  pop.value = null
+  if (next === 'read') {
+    // 찾기 막대는 본문 칸을 움직인다. 읽는 동안에는 할 일이 없다
+    if (finder.value.open) finder.value = { ...finder.value, open: false, message: '' }
+    nextTick(() => reader.value?.focus({ preventScroll: true }))
+  } else {
+    nextTick(() => {
+      syncBackdrop()
+      if (!trashed.value) editor.value?.focus({ preventScroll: true })
+    })
+  }
+}
+
+/** 본문 칸이 있어야 하는 일. 읽는 중이면 편집으로 돌아가 칸이 보인 뒤에 한다. */
+function whenEditing(run) {
+  if (!reading.value) {
+    nextTick(run)
+    return
+  }
+  setMode('edit')
+  nextTick(run)
+}
+
+function openFind(withReplace) {
+  if (!memo.value || trashed.value) return
+  whenEditing(() => notepad.openFinder(withReplace))
+}
+
+/**
+ * 읽기 모드에서 보일 덩어리. 토큰 자리에서 글을 끊고 그 사이에 그림을 놓는다.
+ * 그림 앞뒤의 빈 줄은 걷는다 — 그림에 위아래 여백이 있어 빈 줄까지 두면 벌어져 보인다.
+ * 번호는 그림 줄과 같다(본문에 처음 나온 순서).
+ */
+const readBlocks = computed(() => {
+  if (!reading.value || !memo.value) return []
+  const text = memo.value.content ?? ''
+  const term = store.searching ? store.query.trim() : ''
+  const byId = new Map(stripItems.value.map((item) => [item.id, item]))
+  const out = []
+  /*
+   * 토큰이 줄 가운데 있으면 같은 줄의 앞뒤 글에 빈칸이 붙어 온다(‘… 그리고 다시 ![…]’).
+   * 그림이 따로 한 덩어리가 되므로 그 빈칸은 걷는다. 줄이 바뀐 뒤의 들여쓰기는 그대로 둔다.
+   */
+  const pushText = (chunk, { afterImage, beforeImage }) => {
+    let body = chunk
+    if (afterImage && !body.startsWith('\n')) body = body.replace(/^[ \t]+/, '')
+    if (beforeImage && !body.endsWith('\n')) body = body.replace(/[ \t]+$/, '')
+    body = body.replace(/^\n+|\n+$/g, '')
+    if (body.trim()) out.push({ key: `t${out.length}`, kind: 'text', parts: splitHits(body, term) })
+  }
+
+  let at = 0
+  for (const token of tokens.value) {
+    pushText(text.slice(at, token.start), { afterImage: at > 0, beforeImage: true })
+    at = token.end
+    const item = byId.get(token.id)
+    const entry = item?.entry ?? null
+    out.push({
+      key: `i${out.length}`,
+      kind: 'image',
+      id: token.id,
+      n: item?.n ?? 0,
+      alt: token.alt,
+      // 그림 설명으로도 검색에 걸린다. 왜 걸렸는지 보이게 설명 줄에서도 칠한다
+      altParts: splitHits(token.alt || '설명 없음', term),
+      src: entry?.url || entry?.full || entry?.preview || null,
+      width: entry?.width || undefined,
+      height: entry?.height || undefined,
+      info: describeImage(entry),
+      failed: entry?.status === 'failed',
+      status: readStatus(entry),
+    })
+  }
+  pushText(text.slice(at), { afterImage: at > 0, beforeImage: false })
+  return out
+})
+
+function readStatus(entry) {
+  if (!entry) return '그림을 찾을 수 없습니다'
+  if (entry.status === 'failed') return '올리지 못했습니다 — 눌러서 다시 올리기'
+  if (entry.status === 'uploading') return `올리는 중 ${Math.round((entry.progress ?? 0) * 100)}%`
+  if (entry.status === 'preparing') return '줄이는 중'
+  return ''
+}
+
+function onReadImage(block) {
+  if (block.failed) gallery.retry(block.id)
+  else openViewer(block.id)
+}
+
+// ── zip 내보내기 ────────────────────────────────────────
+
+/** 본문 txt 와 그림을 zip 하나로. 올리는 중인 그림이 있으면 기다리게 한다 — 빠진 채 묶이면 모른다. */
+async function exportZip() {
+  if (!memo.value || zipping.value) return
+  pop.value = null
+  if (gallery.pending.value) {
+    toast.info(`그림 ${gallery.pending.value}장을 올리는 중입니다. 다 올린 뒤에 다시 눌러 주세요.`)
+    return
+  }
+  if (dirty.value) await save()
+
+  zipping.value = true
+  const bytes = stripItems.value.reduce((sum, item) => sum + (item.entry?.byteSize ?? 0), 0)
+  if (bytes > 3 * 1024 * 1024) toast.info(`그림 ${stripItems.value.length}장(${formatBytes(bytes)})을 묶어 내려받는 중입니다…`)
+  try {
+    const filename = await memoApi.exportZip(memo.value.id)
+    toast.success(`${filename} 파일을 내려받았습니다.`)
+  } catch (error) {
+    toast.error(`내보내지 못했습니다. ${error.message}`)
+  } finally {
+    zipping.value = false
+  }
 }
 
 // ── 찾은 자리 칠하기 ────────────────────────────────────
@@ -674,7 +821,8 @@ async function openMemo(id, { focus = true } = {}) {
     mobilePane.value = 'editor'
     await nextTick()
     notepad.sync()
-    if (store.searching && !finder.value.open) jumpToFirstHit(focus)
+    // 읽는 중이면 찾은 말은 읽기 화면에서 칠해 보인다. 숨은 본문 칸의 커서는 옮기지 않는다
+    if (store.searching && !finder.value.open && !reading.value) jumpToFirstHit(focus)
   } catch (error) {
     toast.error(error.message)
   } finally {
@@ -780,6 +928,8 @@ async function createMemo(folderId = undefined) {
     store.rememberMemo(created.id)
     store.revealFolder(created.folderId)
     mobilePane.value = 'editor'
+    // 새 메모는 쓰려고 만든 것이다
+    mode.value = 'edit'
     await nextTick()
     titleInput.value?.focus()
     titleInput.value?.select()
@@ -1078,7 +1228,12 @@ function onDocKey(event) {
   }
   if (mod && (key === 'f' || key === 'h') && memo.value && !trashed.value) {
     event.preventDefault()
-    notepad.openFinder(key === 'h')
+    openFind(key === 'h')
+    return
+  }
+  if (mod && key === 'e' && !event.shiftKey && !event.altKey && memo.value) {
+    event.preventDefault()
+    setMode(reading.value ? 'edit' : 'read')
     return
   }
   if (event.key === 'Escape') {
@@ -1439,8 +1594,31 @@ watch(
           <button v-if="saveError" class="pad__retry" type="button" :title="saveError" @click="save">다시 시도</button>
         </span>
 
+        <span class="pad__divider" aria-hidden="true"></span>
+        <span class="seg" role="group" aria-label="보기 방식">
+          <button
+            class="seg__btn"
+            :class="{ 'seg__btn--on': !reading }"
+            type="button"
+            title="메모장처럼 고쳐 씁니다 (Ctrl+E)"
+            :aria-pressed="!reading"
+            @click="setMode('edit')"
+          >
+            편집
+          </button>
+          <button
+            class="seg__btn"
+            :class="{ 'seg__btn--on': reading }"
+            type="button"
+            title="글 사이에 그림을 크게 이어서 봅니다 (Ctrl+E)"
+            :aria-pressed="reading"
+            @click="setMode('read')"
+          >
+            읽기
+          </button>
+        </span>
+
         <template v-if="!trashed">
-          <span class="pad__divider" aria-hidden="true"></span>
           <button
             class="btn btn--icon"
             type="button"
@@ -1456,7 +1634,7 @@ watch(
             title="찾기 (Ctrl+F)"
             aria-label="찾기 (Ctrl+F)"
             :aria-pressed="finder.open"
-            @click="finder.open ? notepad.closeFinder() : notepad.openFinder(false)"
+            @click="finder.open ? notepad.closeFinder() : openFind(false)"
           >
             <AppIcon name="search" :size="16" />
           </button>
@@ -1563,7 +1741,7 @@ watch(
               :class="{ 'is-on': pop === 'more' }"
               type="button"
               title="더 보기"
-              aria-label="더 보기: txt 내보내기, 휴지통으로"
+              :aria-label="stripItems.length ? '더 보기: txt 내보내기, 그림까지 zip 으로 내보내기, 휴지통으로' : '더 보기: txt 내보내기, 휴지통으로'"
               :aria-expanded="pop === 'more'"
               @click="togglePop('more')"
             >
@@ -1574,6 +1752,19 @@ watch(
                 <AppIcon name="download" :size="14" />
                 txt 로 내보내기
                 <kbd class="popover__kbd">Ctrl+Shift+S</kbd>
+              </button>
+              <button
+                v-if="stripItems.length"
+                class="popover__item"
+                type="button"
+                role="menuitem"
+                title="본문 txt 와 그림 파일을 함께 묶습니다. 본문의 그림 자리는 images/ 의 파일을 가리킵니다"
+                :disabled="zipping"
+                @click="exportZip"
+              >
+                <AppIcon name="image" :size="14" />
+                그림까지 zip 으로
+                <span class="popover__kbd num">{{ stripItems.length }}장</span>
               </button>
               <button class="popover__item popover__item--danger" type="button" role="menuitem" @click="trashMemo()">
                 <AppIcon name="trash" :size="14" />
@@ -1670,7 +1861,7 @@ watch(
           maxlength="200"
           placeholder="제목"
           aria-label="제목"
-          :readonly="trashed"
+          :readonly="trashed || reading"
           @input="touched"
           @keydown.enter.prevent="onTitleEnter"
         />
@@ -1681,7 +1872,7 @@ watch(
         </p>
 
         <MemoImageStrip
-          v-if="stripItems.length"
+          v-if="stripItems.length && !reading"
           :items="stripItems"
           :current-id="caretImageId"
           :readonly="trashed"
@@ -1692,8 +1883,54 @@ watch(
         />
 
         <div class="pad__body">
+          <!-- 읽기: 글 사이에 그림을 크게. 그림을 누르면 크게 보기가 열린다 -->
           <div
-            v-if="showBackdrop"
+            v-if="reading"
+            ref="reader"
+            class="read"
+            :class="{ 'read--nowrap': memo.wordWrap === false }"
+            :style="editorStyle"
+            tabindex="0"
+            aria-label="본문 읽기"
+          >
+            <p v-if="!readBlocks.length" class="read__empty">비어 있는 메모입니다.</p>
+            <template v-for="block in readBlocks" :key="block.key">
+              <div v-if="block.kind === 'text'" class="read__text"><template v-for="(part, i) in block.parts" :key="i"><mark v-if="part.hit">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></div>
+              <figure v-else class="read__fig">
+                <button
+                  class="read__shot"
+                  :class="{ 'read__shot--empty': !block.src, 'read__shot--bad': block.failed }"
+                  type="button"
+                  :aria-label="block.failed ? `그림 ${block.n} 다시 올리기, ${block.alt || '설명 없음'}` : `그림 ${block.n} 크게 보기, ${block.alt || '설명 없음'}`"
+                  @click="onReadImage(block)"
+                >
+                  <img
+                    v-if="block.src"
+                    :src="block.src"
+                    :alt="block.alt"
+                    :width="block.width"
+                    :height="block.height"
+                    loading="lazy"
+                    decoding="async"
+                    draggable="false"
+                    @error="refreshImages"
+                  />
+                  <span v-else class="read__missing">
+                    <AppIcon name="image" :size="18" />
+                    {{ block.status }}
+                  </span>
+                  <span v-if="block.src && block.status" class="read__badge" :class="{ 'read__badge--bad': block.failed }">{{ block.status }}</span>
+                </button>
+                <figcaption class="read__cap">
+                  <span class="num">그림 {{ block.n }}</span>
+                  <span class="read__alt"><template v-for="(part, i) in block.altParts" :key="i"><mark v-if="part.hit">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></span>
+                  <span v-if="block.info" class="num read__info">{{ block.info }}</span>
+                </figcaption>
+              </figure>
+            </template>
+          </div>
+          <div
+            v-if="showBackdrop && !reading"
             ref="backdrop"
             class="pad__text pad__backdrop"
             :class="{ 'pad__text--nowrap': memo.wordWrap === false }"
@@ -1701,6 +1938,7 @@ watch(
             aria-hidden="true"
           ><template v-for="(seg, i) in backdropSegs" :key="i"><mark v-if="seg.hit" :class="{ cur: seg.cur }">{{ seg.text }}</mark><span v-else-if="seg.tok" :class="tokenClass(seg.tok)">{{ seg.text }}</span><template v-else>{{ seg.text }}</template></template></div>
           <textarea
+            v-show="!reading"
             ref="editor"
             v-model="memo.content"
             class="pad__text pad__area"
@@ -1725,8 +1963,11 @@ watch(
       </div>
 
       <footer class="pad__status num">
-        <span>줄 {{ status.line }}, 칸 {{ status.column }}</span>
-        <span v-if="status.selected">고름 {{ status.selected }}자</span>
+        <span v-if="reading">읽기 모드 · Ctrl+E 로 편집</span>
+        <template v-else>
+          <span>줄 {{ status.line }}, 칸 {{ status.column }}</span>
+          <span v-if="status.selected">고름 {{ status.selected }}자</span>
+        </template>
         <span>{{ stats.chars }}자 · {{ stats.lines }}줄</span>
         <span v-if="imageStats">{{ imageStats }}</span>
         <span class="pad__spacer"></span>
@@ -2735,6 +2976,169 @@ watch(
 .pad__backdrop .tok--bad {
   background: var(--danger-soft);
   box-shadow: 0 0 0 1px var(--danger-border);
+}
+
+/* ---------- 보기 방식 (편집 · 읽기) ---------- */
+.seg {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  margin: 0 4px 0 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sel);
+}
+
+.seg__btn {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seg__btn:hover {
+  color: var(--text);
+}
+
+.seg__btn--on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+
+.seg__btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+/* ---------- 읽기 ---------- */
+/* 본문 칸과 같은 단·여백·글꼴을 쓴다. 바꿔 볼 때 글이 옆으로 튀지 않는다 */
+.read {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 10px var(--gutter) 64px;
+  line-height: 1.75;
+  scrollbar-gutter: stable;
+  outline: none;
+}
+
+.read__text {
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.read--nowrap .read__text {
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.read__empty {
+  margin: 0;
+  color: var(--text-4);
+}
+
+.read__fig {
+  margin: 12px 0 22px;
+}
+
+/* 작은 그림은 늘리지 않는다. 버튼이 그림만큼만 넓어진다 */
+.read__shot {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: zoom-in;
+}
+
+.read__shot:hover {
+  border-color: var(--text-4);
+}
+
+.read__shot:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* 세로로 긴 휴대폰 화면이 한 장에 화면을 다 덮지 않게 높이를 묶는다. 크게 보기에서는 다 보인다 */
+.read__shot img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 75vh;
+  margin: 0 auto;
+}
+
+.read__shot--empty {
+  cursor: pointer;
+}
+
+.read__shot--bad {
+  border-color: var(--danger-border);
+}
+
+.read__missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px;
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.read__badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(24, 25, 27, 0.78);
+  color: #ffffff;
+  font-family: var(--font);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.read__badge--bad {
+  background: var(--danger);
+}
+
+.read__cap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 8px;
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.read__cap .num {
+  font-size: 11.5px;
+}
+
+.read__alt {
+  color: var(--text-2);
+}
+
+.read__cap .read__info {
+  font-size: 11px;
 }
 
 /* ---------- 끌어다 놓기 ---------- */

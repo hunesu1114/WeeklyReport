@@ -326,10 +326,14 @@ public class MemoService {
     public TextFile exportText(Long id) {
         Memo memo = loadMemo(id);
         String body = memo.getContent() == null ? "" : MemoImageTokens.toText(memo.getContent());
-        byte[] bytes = body.replace("\r\n", "\n").replace("\n", "\r\n")
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] bytes = windowsLines(body).getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
         return new TextFile(safeFilename(memo.getTitle()) + ".txt", bytes);
+    }
+
+    /** 줄 끝을 CRLF 로. 내보내는 txt 는 모두 이것을 거친다(그림까지 묶는 zip 안의 것도). */
+    static String windowsLines(String text) {
+        return text.replace("\r\n", "\n").replace("\n", "\r\n");
     }
 
     // ── 내부 ─────────────────────────────────────────────────
@@ -395,7 +399,7 @@ public class MemoService {
     }
 
     /** 파일명에 쓸 수 없는 문자를 걷어낸다. 제목은 사용자가 자유롭게 적는다. */
-    private static String safeFilename(String title) {
+    static String safeFilename(String title) {
         if (title == null || title.isBlank()) return UNTITLED;
         String cleaned = title.trim().replaceAll("[\\\\/:*?\"<>|\\r\\n\\t]", "_");
         return cleaned.length() > 80 ? cleaned.substring(0, 80) : cleaned;

@@ -45,6 +45,23 @@ class MemoImageTokensTest {
     }
 
     @Test
+    void 토큰마다_바꿀_글을_정해_바꾼다() {
+        String content = "앞\n![ 화면 ](img:k3F9aQ2xZ7)\n![](img:Qm81LxV0pa) 뒤";
+
+        String out = MemoImageTokens.replace(content,
+                (alt, id) -> id.equals("k3F9aQ2xZ7") ? "![" + alt + "](images/01.png)" : MemoImageTokens.label(alt));
+
+        // 설명의 앞뒤 빈칸은 걷힌다. 토큰이 아닌 글은 그대로다
+        assertThat(out).isEqualTo("앞\n![화면](images/01.png)\n[그림] 뒤");
+    }
+
+    @Test
+    void 같은_그림이_여러_번_나오면_토큰도_여러_번_준다() {
+        assertThat(MemoImageTokens.tokens("![a](img:k3F9aQ2xZ7) ![b](img:k3F9aQ2xZ7)"))
+                .containsExactly(new MemoImageTokens.Token("a", "k3F9aQ2xZ7"), new MemoImageTokens.Token("b", "k3F9aQ2xZ7"));
+    }
+
+    @Test
     void 토큰이_없으면_그대로_돌려준다() {
         assertThat(MemoImageTokens.toText("그냥 글")).isEqualTo("그냥 글");
         assertThat(MemoImageTokens.toText(null)).isNull();
