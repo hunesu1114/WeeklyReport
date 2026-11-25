@@ -2,6 +2,7 @@ package com.khs.weeklyreport.web.dto;
 
 import com.khs.weeklyreport.domain.Memo;
 import com.khs.weeklyreport.domain.MemoFolder;
+import com.khs.weeklyreport.domain.MemoImageTokens;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.util.List;
 
 /** 메모와 폴더 DTO. */
 public final class MemoDtos {
@@ -81,12 +83,15 @@ public final class MemoDtos {
             boolean favorite,
             Instant updatedAt,
             /** 휴지통에 넣은 시각. 살아 있으면 비어 있다. */
-            Instant deletedAt
+            Instant deletedAt,
+            /** 본문에 든 그림 수. 목록 줄에 그림 표시를 단다. */
+            int images
     ) {
         public static MemoSummary of(Memo memo) {
             return new MemoSummary(memo.getId(), memo.folderId(), memo.getTitle(), memo.preview(),
                     memo.getContent() == null ? 0 : memo.getContent().length(),
-                    memo.isPinned(), memo.isFavorite(), memo.getUpdatedAt(), memo.getDeletedAt());
+                    memo.isPinned(), memo.isFavorite(), memo.getUpdatedAt(), memo.getDeletedAt(),
+                    MemoImageTokens.count(memo.getContent()));
         }
     }
 
@@ -113,14 +118,40 @@ public final class MemoDtos {
             boolean favorite,
             Instant createdAt,
             Instant updatedAt,
-            Instant deletedAt
+            Instant deletedAt,
+            /**
+             * 본문 토큰이 가리키는 그림. 본문 순서대로. 토큰은 있는데 여기 없으면
+             * 지워졌거나 남의 그림이다 — 화면은 '그림 없음'으로 그린다.
+             */
+            List<ImageView> images
     ) {
-        public static MemoView of(Memo memo) {
+        public static MemoView of(Memo memo, List<ImageView> images) {
             return new MemoView(memo.getId(), memo.folderId(), memo.getTitle(), memo.getContent(),
                     memo.getFontFamily(), memo.getFontSize(), memo.getFontColor(), memo.isWordWrap(),
                     memo.isPinned(), memo.isFavorite(), memo.getCreatedAt(), memo.getUpdatedAt(),
-                    memo.getDeletedAt());
+                    memo.getDeletedAt(), images);
         }
+    }
+
+    // ── 그림 ─────────────────────────────────────────────────
+
+    /**
+     * 그림 한 장.
+     *
+     * @param url      원본 주소. 서명과 만료가 붙어 있어 {@code <img src>} 로 바로 쓴다.
+     * @param thumbUrl 긴 변 320px 섬네일 주소.
+     * @param name     올릴 때의 파일 이름. 내려받을 때 쓴다.
+     */
+    public record ImageView(
+            String id,
+            String url,
+            String thumbUrl,
+            String contentType,
+            int byteSize,
+            int width,
+            int height,
+            String name
+    ) {
     }
 
     /**
@@ -128,9 +159,9 @@ public final class MemoDtos {
      * 휴지통도 함께 싣는다 — 사이드바가 몇 장 들었는지 늘 보여준다.
      */
     public record WorkspaceView(
-            java.util.List<FolderView> folders,
-            java.util.List<MemoSummary> memos,
-            java.util.List<MemoSummary> trash
+            List<FolderView> folders,
+            List<MemoSummary> memos,
+            List<MemoSummary> trash
     ) {
     }
 }

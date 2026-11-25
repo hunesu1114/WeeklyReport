@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { memoApi } from '@/api/client'
+import { imageCount, toPlain } from '@/utils/memoImage'
 
 const OPEN_KEY = 'weekly-report:memo-open-folders'
 const LAST_KEY = 'weekly-report:last-memo'
@@ -191,6 +192,7 @@ export const useMemoStore = defineStore('memo', () => {
       favorite: saved.favorite,
       updatedAt: saved.updatedAt,
       deletedAt: saved.deletedAt ?? null,
+      images: imageCount(saved.content),
     }
     memos.value = memos.value.filter((m) => m.id !== saved.id)
     trash.value = trash.value.filter((m) => m.id !== saved.id)
@@ -350,9 +352,10 @@ function byUpdatedDesc(a, b) {
   return new Date(b.updatedAt) - new Date(a.updatedAt)
 }
 
+/** 서버의 Memo.preview() 와 같은 규칙. 그림 토큰은 [그림: 설명] 으로 바꿔 보인다. */
 function firstLine(content) {
   if (!content || !content.trim()) return ''
-  const line = content.trim().split('\n')[0]
+  const line = toPlain(content.trim().split('\n')[0])
   return line.length > 80 ? line.slice(0, 80) + '…' : line
 }
 

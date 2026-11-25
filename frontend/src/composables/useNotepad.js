@@ -384,6 +384,8 @@ export function useNotepad(textareaRef, { onSave, onNew, onExport } = {}) {
     onCopy,
     onCut,
     insert,
+    replaceRange,
+    selectRange,
     openFinder,
     closeFinder,
     search,

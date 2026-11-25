@@ -71,6 +71,10 @@ public class SecurityConfig {
                         // 인증에 실패하거나 시간을 넘기면 핸들러가 연결을 끊는다.
                         .requestMatchers("/ws/**").permitAll()
 
+                        // 메모 그림. <img src> 는 토큰 헤더를 싣지 못한다. 대신 주소에 붙은
+                        // 서명과 만료 시각을 MemoImageService 가 확인한다. 읽기만 연다.
+                        .requestMatchers(HttpMethod.GET, "/api/memo-images/**").permitAll()
+
                         .requestMatchers("/api/**").authenticated()
 
                         // SPA 정적 파일은 앞단 nginx 가 준다. 여기까지 오는 것은 없다.

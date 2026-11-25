@@ -3,6 +3,7 @@ package com.khs.weeklyreport.service;
 import com.khs.weeklyreport.domain.AppUser;
 import com.khs.weeklyreport.domain.Memo;
 import com.khs.weeklyreport.domain.MemoFolder;
+import com.khs.weeklyreport.domain.MemoImageTokens;
 import com.khs.weeklyreport.repository.MemoFolderRepository;
 import com.khs.weeklyreport.repository.MemoRepository;
 import com.khs.weeklyreport.security.CurrentUser;
@@ -44,22 +45,26 @@ public class MemoService {
 
     private final MemoRepository memoRepository;
     private final MemoFolderRepository folderRepository;
+    private final MemoImageService imageService;
     private final CurrentUser currentUser;
     private final Clock clock;
 
     @Autowired
     public MemoService(MemoRepository memoRepository,
                        MemoFolderRepository folderRepository,
+                       MemoImageService imageService,
                        CurrentUser currentUser) {
-        this(memoRepository, folderRepository, currentUser, Clock.systemUTC());
+        this(memoRepository, folderRepository, imageService, currentUser, Clock.systemUTC());
     }
 
     MemoService(MemoRepository memoRepository,
                 MemoFolderRepository folderRepository,
+                MemoImageService imageService,
                 CurrentUser currentUser,
                 Clock clock) {
         this.memoRepository = memoRepository;
         this.folderRepository = folderRepository;
+        this.imageService = imageService;
         this.currentUser = currentUser;
         this.clock = clock;
     }
@@ -69,13 +74,15 @@ public class MemoService {
     /**
      * 폴더 · 메모 · 휴지통을 한 번에.
      *
-     * <p>휴지통 정리를 여기서 한다. 따로 스케줄러를 두면 서버가 꺼져 있던 동안의 몫이
-     * 밀리고, 어차피 휴지통을 보는 곳은 이 화면뿐이라 열 때 치우면 충분하다.
+     * <p>휴지통과 쓰지 않는 그림 정리를 여기서 한다. 따로 스케줄러를 두면 서버가 꺼져 있던
+     * 동안의 몫이 밀리고, 어차피 둘을 보는 곳은 이 화면뿐이라 열 때 치우면 충분하다.
+     * 휴지통을 먼저 비워야 거기 든 메모의 그림도 이번 정리부터 하루를 센다.
      */
     @Transactional
     public MemoDtos.WorkspaceView workspace() {
         Long ownerId = currentUser.requireId();
         memoRepository.purgeTrashedBefore(ownerId, clock.instant().minus(TRASH_KEEP));
+        imageService.collectGarbage(ownerId);
 
         List<Memo> memos = memoRepository.findMine(ownerId);
 
@@ -103,6 +110,10 @@ public class MemoService {
      *
      * <p>어느 폴더에 넣었는지 기억나지 않아서 찾는 것이므로 폴더를 가리지 않는다.
      * 제목에서 찾은 것이 앞에 온다 — 사람은 찾는 말을 대개 제목으로 기억한다.
+     *
+     * <p>본문은 그림 토큰을 {@code [그림: 설명]} 으로 바꾼 글에서 찾는다. 그림 설명으로는
+     * 찾히고, 토큰 속 아이디나 'img' 같은 말로는 걸리지 않는다. DB 는 원래 본문으로
+     * 넓게 고르고, 여기서 한 번 더 거른다.
      */
     @Transactional(readOnly = true)
     public List<MemoDtos.SearchHit> search(String query) {
@@ -112,12 +123,16 @@ public class MemoService {
         String needle = q.toLowerCase(Locale.ROOT);
         List<MemoDtos.SearchHit> hits = memoRepository.search(currentUser.requireId(), likePattern(needle))
                 .stream()
-                .limit(SEARCH_LIMIT)
                 .map(memo -> {
                     boolean inTitle = memo.getTitle().toLowerCase(Locale.ROOT).contains(needle);
+                    String body = MemoImageTokens.toText(memo.getContent());
+                    boolean inBody = body != null && body.toLowerCase(Locale.ROOT).contains(needle);
+                    if (!inTitle && !inBody) return null;
                     return new MemoDtos.SearchHit(MemoDtos.MemoSummary.of(memo),
-                            snippet(memo.getContent(), needle, memo.preview()), inTitle);
+                            snippet(body, needle, memo.preview()), inTitle);
                 })
+                .filter(java.util.Objects::nonNull)
+                .limit(SEARCH_LIMIT)
                 .toList();
 
         return hits.stream()
@@ -137,6 +152,14 @@ public class MemoService {
 
         int start = Math.max(0, at - SNIPPET_LEAD);
         int end = Math.min(flat.length(), start + SNIPPET_LENGTH);
+
+        // [그림: 설명] 을 가운데서 자르지 않는다. 화면은 온전한 것만 '그림' 꼬리표로 바꾼다
+        int open = flat.lastIndexOf("[그림", start);
+        if (open >= 0 && open < start && flat.indexOf(']', open) >= start) start = open;
+        int last = flat.lastIndexOf("[그림", end - 1);
+        int close = last < 0 ? -1 : flat.indexOf(']', last);
+        if (last >= start && close >= end) end = close + 1;
+
         return (start > 0 ? "…" : "") + flat.substring(start, end) + (end < flat.length() ? "…" : "");
     }
 
@@ -191,7 +214,7 @@ public class MemoService {
 
     @Transactional(readOnly = true)
     public MemoDtos.MemoView get(Long id) {
-        return MemoDtos.MemoView.of(loadMemo(id));
+        return view(loadMemo(id));
     }
 
     @Transactional
@@ -203,9 +226,12 @@ public class MemoService {
         memo.setSortOrder((int) memoRepository.countMine(me.getId()));
         apply(memo, request);
 
-        return MemoDtos.MemoView.of(memoRepository.save(memo));
+        Memo saved = memoRepository.save(memo);
+        imageService.syncRefs(saved);
+        return view(saved);
     }
 
+    /** 저장할 때마다 본문의 그림 토큰으로 이 메모가 가리키는 그림을 다시 맞춘다. */
     @Transactional
     public MemoDtos.MemoView update(Long id, MemoDtos.MemoRequest request) {
         Memo memo = loadMemo(id);
@@ -213,14 +239,16 @@ public class MemoService {
             throw new IllegalArgumentException("휴지통에 있는 메모는 고칠 수 없습니다. 먼저 되살리세요.");
         }
         apply(memo, request);
-        return MemoDtos.MemoView.of(memoRepository.save(memo));
+        Memo saved = memoRepository.save(memo);
+        imageService.syncRefs(saved);
+        return view(saved);
     }
 
     @Transactional
     public MemoDtos.MemoView move(Long id, MemoDtos.MemoMoveRequest request) {
         Memo memo = loadMemo(id);
         memo.setFolder(request.folderId() == null ? null : loadFolder(request.folderId()));
-        return MemoDtos.MemoView.of(memoRepository.save(memo));
+        return view(memoRepository.save(memo));
     }
 
     /**
@@ -232,19 +260,19 @@ public class MemoService {
     @Transactional
     public MemoDtos.MemoView setPinned(Long id, boolean value) {
         Memo memo = loadMemo(id);
-        if (memo.isPinned() == value) return MemoDtos.MemoView.of(memo);
+        if (memo.isPinned() == value) return view(memo);
 
         memoRepository.updatePinned(id, currentUser.requireId(), value);
-        return MemoDtos.MemoView.of(loadMemo(id));
+        return view(loadMemo(id));
     }
 
     @Transactional
     public MemoDtos.MemoView setFavorite(Long id, boolean value) {
         Memo memo = loadMemo(id);
-        if (memo.isFavorite() == value) return MemoDtos.MemoView.of(memo);
+        if (memo.isFavorite() == value) return view(memo);
 
         memoRepository.updateFavorite(id, currentUser.requireId(), value);
-        return MemoDtos.MemoView.of(loadMemo(id));
+        return view(loadMemo(id));
     }
 
     /**
@@ -262,10 +290,10 @@ public class MemoService {
     @Transactional
     public MemoDtos.MemoView restore(Long id) {
         Memo memo = loadMemo(id);
-        if (!memo.isTrashed()) return MemoDtos.MemoView.of(memo);
+        if (!memo.isTrashed()) return view(memo);
 
         memoRepository.updateDeletedAt(id, currentUser.requireId(), null);
-        return MemoDtos.MemoView.of(loadMemo(id));
+        return view(loadMemo(id));
     }
 
     /** 휴지통에 든 것만 영구히 지운다. 살아 있는 메모를 한 번에 없애는 길은 두지 않는다. */
@@ -292,11 +320,12 @@ public class MemoService {
     /**
      * 메모 하나를 txt 로. 줄 끝은 CRLF 로 바꾼다 —
      * 메모장으로 열었을 때 줄이 안 나뉘고 한 줄로 붙어 보이는 것을 막는다.
+     * 그림 토큰은 {@code [그림: 설명]} 으로 바꾼다. 메모장에서는 아이디가 아무 뜻이 없다.
      */
     @Transactional(readOnly = true)
     public TextFile exportText(Long id) {
         Memo memo = loadMemo(id);
-        String body = memo.getContent() == null ? "" : memo.getContent();
+        String body = memo.getContent() == null ? "" : MemoImageTokens.toText(memo.getContent());
         byte[] bytes = body.replace("\r\n", "\n").replace("\n", "\r\n")
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
@@ -304,6 +333,11 @@ public class MemoService {
     }
 
     // ── 내부 ─────────────────────────────────────────────────
+
+    /** 메모 한 장을 화면에 보낼 모양으로. 본문 토큰이 가리키는 그림 주소를 함께 싣는다. */
+    private MemoDtos.MemoView view(Memo memo) {
+        return MemoDtos.MemoView.of(memo, imageService.viewsFor(currentUser.requireId(), memo.getContent()));
+    }
 
     private void apply(Memo memo, MemoDtos.MemoRequest request) {
         String title = request.title() == null ? "" : request.title().trim();

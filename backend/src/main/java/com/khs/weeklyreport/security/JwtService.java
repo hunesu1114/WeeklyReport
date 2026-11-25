@@ -10,8 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -112,5 +115,21 @@ public class JwtService {
 
     public long ttlSeconds() {
         return ttl.toSeconds();
+    }
+
+    /**
+     * 로그인 토큰 말고 다른 서명에 쓸 키. 같은 비밀에서 용도별로 갈라 낸다.
+     *
+     * <p>로그인 키를 그대로 쓰면 한 곳에서 만든 서명이 다른 곳에서 통할 여지가 생긴다.
+     * 용도 이름을 HMAC 해서 만든 키는 원래 키를 몰라서는 되짚을 수 없고, 용도끼리도 겹치지 않는다.
+     */
+    public byte[] derivedKey(String purpose) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(key.getEncoded(), "HmacSHA256"));
+            return mac.doFinal(purpose.getBytes(StandardCharsets.UTF_8));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("서명 키를 만들지 못했습니다.", e);
+        }
     }
 }

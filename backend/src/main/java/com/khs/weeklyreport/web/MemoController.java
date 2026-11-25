@@ -1,5 +1,6 @@
 package com.khs.weeklyreport.web;
 
+import com.khs.weeklyreport.service.MemoImageService;
 import com.khs.weeklyreport.service.MemoService;
 import com.khs.weeklyreport.web.dto.MemoDtos;
 import jakarta.validation.Valid;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -23,9 +25,11 @@ public class MemoController {
             new MediaType("text", "plain", StandardCharsets.UTF_8);
 
     private final MemoService memoService;
+    private final MemoImageService imageService;
 
-    public MemoController(MemoService memoService) {
+    public MemoController(MemoService memoService, MemoImageService imageService) {
         this.memoService = memoService;
+        this.imageService = imageService;
     }
 
     /** 폴더 트리와 메모 목록을 한 번에. 화면이 두 번 부르지 않게 한다. */
@@ -132,6 +136,22 @@ public class MemoController {
     @DeleteMapping("/trash")
     public Map<String, Integer> emptyTrash() {
         return Map.of("removed", memoService.emptyTrash());
+    }
+
+    /**
+     * 그림 한 장을 올린다. 토큰은 화면이 이미 본문에 넣었다 — 아이디는 화면이 정해 보낸다.
+     * 원본과 섬네일(긴 변 320px)을 함께 받는다. 줄이는 일은 화면이 한다.
+     */
+    @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public MemoDtos.ImageView uploadImage(@PathVariable Long id,
+                                          @RequestParam("imageId") String imageId,
+                                          @RequestPart("file") MultipartFile file,
+                                          @RequestPart("thumb") MultipartFile thumb,
+                                          @RequestParam("width") int width,
+                                          @RequestParam("height") int height,
+                                          @RequestParam(name = "name", required = false) String name) {
+        return imageService.upload(id, imageId, file, thumb, width, height, name);
     }
 
     /** 메모를 txt 로 내려받는다. 줄 끝은 메모장이 읽을 수 있게 CRLF 로 나간다. */

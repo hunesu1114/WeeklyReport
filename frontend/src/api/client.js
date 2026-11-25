@@ -275,7 +275,31 @@ export const memoApi = {
     http.put(`/memos/folders/${id}/move`, { parentId }).then((r) => r.data),
   removeFolder: (id) => http.delete(`/memos/folders/${id}`),
 
-  /** txt 로 내려받는다. 줄 끝은 서버가 CRLF 로 바꿔 보낸다. */
+  /**
+   * 그림 한 장을 올린다. 아이디는 화면이 정해 본문에 토큰을 먼저 넣은 뒤 부른다.
+   * 같은 아이디로 다시 올려도 서버가 있는 것을 돌려준다 — 실패하면 그대로 다시 부르면 된다.
+   * 휴대폰 사진은 줄여도 1~2MB 라, 느린 망에서 기본 20초를 넘길 수 있어 넉넉히 기다린다.
+   */
+  uploadImage(memoId, { id, file, thumb, width, height, name }, { onProgress, signal } = {}) {
+    const body = new FormData()
+    body.append('imageId', id)
+    body.append('file', file, name || `image-${id}`)
+    body.append('thumb', thumb, 'thumb')
+    body.append('width', String(width))
+    body.append('height', String(height))
+    if (name) body.append('name', name)
+    return http
+      .post(`/memos/${memoId}/images`, body, {
+        timeout: 120000,
+        signal,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress?.(event.loaded / event.total)
+        },
+      })
+      .then((r) => r.data)
+  },
+
+  /** txt 로 내려받는다. 줄 끝은 서버가 CRLF 로 바꿔 보낸다. 그림은 [그림: 설명] 으로 바뀐다. */
   async exportText(id) {
     const response = await http.get(`/memos/${id}/export`, { responseType: 'blob' })
     const filename = parseFilename(response.headers['content-disposition']) || `memo-${id}.txt`

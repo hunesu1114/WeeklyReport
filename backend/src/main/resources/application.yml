@@ -27,7 +27,9 @@ spring:
     default-property-inclusion: non_null
   servlet:
     multipart:
+      # 메모 그림 한 장 상한과 같다. 섬네일이 함께 오므로 요청 전체는 조금 더 받는다.
       max-file-size: 5MB
+      max-request-size: 6MB
 
 app:
   cors:
@@ -37,6 +39,12 @@ app:
     # 운영에서는 반드시 채운다.  openssl rand -base64 32
     secret: ${APP_JWT_SECRET:}
     ttl: ${APP_JWT_TTL:12h}
+  # 메모 그림 한도. 최악이면 사람 수 × quota 만큼 DB 가 커진다. 디스크와 백업 시간에 맞춘다.
+  # 한 장 상한을 5MB 보다 올리려면 위 multipart 와 nginx(client_max_body_size 8m)도 함께 올린다.
+  memo-image:
+    max-bytes: ${APP_MEMO_IMAGE_MAX_BYTES:5MB}
+    max-per-memo: ${APP_MEMO_IMAGE_MAX_PER_MEMO:50}
+    quota-per-user: ${APP_MEMO_IMAGE_QUOTA:300MB}
 
 management:
   endpoints:

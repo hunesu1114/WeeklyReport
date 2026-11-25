@@ -2,12 +2,26 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import BaseModal from '@/components/BaseModal.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
+import MemoImageStrip from '@/components/MemoImageStrip.vue'
 import MemoTree from '@/components/MemoTree.vue'
 import { memoApi } from '@/api/client'
 import { useMemoStore, ROOT, FAVORITES, RECENT, TRASH } from '@/stores/memo'
 import { useToast } from '@/composables/useToast'
 import { useNotepad } from '@/composables/useNotepad'
-import { lineCount } from '@/utils/notepad'
+import { useMemoImages } from '@/composables/useMemoImages'
+import { lineCount, lineEndOf } from '@/utils/notepad'
+import {
+  IMAGE_LIMITS,
+  IMAGE_TYPES,
+  altFromFile,
+  findTokens,
+  formatBytes,
+  imageCount,
+  splitImageTags,
+  tokenOf,
+  uniqueTokens,
+} from '@/utils/memoImage'
 
 const store = useMemoStore()
 const toast = useToast()
@@ -50,6 +64,7 @@ const SHORTCUTS = [
   ['Ctrl+D', '줄 복제'],
   ['Ctrl+Delete', '줄 삭제'],
   ['Ctrl+X / Ctrl+C', '고른 것 없으면 한 줄 잘라내기 / 복사'],
+  ['Ctrl+V', '그림 붙여넣기 (클립보드에 그림만 있을 때)'],
   ['F5', '날짜와 시각 넣기'],
   ['↑ / ↓', '목록에서 위아래 메모 열기'],
 ]
@@ -60,6 +75,7 @@ const titleInput = ref(null)
 const findInput = ref(null)
 const searchInput = ref(null)
 const listRef = ref(null)
+const fileInput = ref(null)
 
 const memo = ref(null)
 /*
@@ -105,6 +121,12 @@ const notepad = useNotepad(editor, {
   onExport: () => exportText(),
 })
 const { status, finder, selection } = notepad
+
+const gallery = useMemoImages()
+/** 크게 보기로 연 그림의 순서. 닫혀 있으면 null */
+const viewerIndex = ref(null)
+/** 편집기 위로 파일을 끌고 왔다. 그림 몇 장인지(모르면 0). 아니면 null */
+const dragging = ref(null)
 
 // ── 목록 머리 ───────────────────────────────────────────
 
@@ -213,6 +235,19 @@ function previewOf(item) {
   return item.preview || '내용 없음'
 }
 
+/**
+ * 목록 미리보기를 조각낸다. 서버가 토큰을 [그림: 설명] 으로 바꿔 주므로, 그 자리는
+ * '그림' 꼬리표 뒤에 설명을 잇고, 나머지는 찾은 말을 칠한다.
+ */
+function previewParts(item) {
+  const q = store.searching ? store.query : ''
+  return splitImageTags(previewOf(item)).flatMap((part) => {
+    if (!part.image) return splitHits(part.text, q)
+    const alt = part.text.replace(/^\[그림:? ?/, '').replace(/\]$/, '')
+    return [{ text: '그림', tag: true }, ...(alt ? splitHits(` ${alt} `, q) : [{ text: ' ', hit: false }])]
+  })
+}
+
 // ── 편집기 모양 ─────────────────────────────────────────
 
 const fontKey = computed(() => {
@@ -251,9 +286,221 @@ const stats = computed(() => {
 const saveState = computed(() => {
   if (trashed.value) return { tone: 'muted', text: '휴지통에 있음' }
   if (saveError.value) return { tone: 'bad', text: '저장하지 못했습니다' }
+  // 글은 저장됐어도 그림이 아직 가는 중이면 탭을 닫으면 안 된다. 그쪽을 먼저 알린다
+  if (gallery.pending.value) return { tone: 'busy', text: `그림 ${gallery.pending.value}장 올리는 중` }
   if (saving.value || dirty.value) return { tone: 'muted', text: '저장 중…' }
   return { tone: 'ok', text: `저장됨 · ${clock(memo.value?.updatedAt)}` }
 })
+
+// ── 그림 ────────────────────────────────────────────────
+
+/** 본문의 토큰 전부. 같은 그림이 두 번 나오면 두 번 다. 칠하기와 커서 위치 판정에 쓴다. */
+const tokens = computed(() => findTokens(memo.value?.content))
+
+/** 그림 줄. 본문에 처음 나온 순서대로 번호를 단다. */
+const stripItems = computed(() =>
+  uniqueTokens(memo.value?.content).map((token, i) => ({
+    id: token.id,
+    alt: token.alt,
+    n: i + 1,
+    entry: gallery.images.get(token.id) ?? null,
+  })),
+)
+
+/** 커서가 걸친 토큰. 토큰 글자 안이나 바로 앞뒤에 있으면 그 그림을 보고 있는 것이다. */
+const caretImageId = computed(() => {
+  const at = selection.value.start
+  return tokens.value.find((t) => at >= t.start && at <= t.end)?.id ?? null
+})
+
+const imageStats = computed(() => {
+  const items = stripItems.value
+  if (!items.length) return ''
+  const bytes = items.reduce((sum, item) => sum + (item.entry?.byteSize ?? 0), 0)
+  return `그림 ${items.length}장${bytes ? ` · ${formatBytes(bytes)}` : ''}`
+})
+
+function isImageFile(file) {
+  return file && file.type.startsWith('image/') && file.type !== 'image/svg+xml'
+}
+
+/**
+ * 그림을 넣는다. 토큰을 먼저 본문에 넣고 올리기는 뒤에서 한다 — 그래서 Ctrl+Z 한 번에
+ * 넣은 토큰이 통째로 빠진다. 토큰은 늘 제 줄에 둔다.
+ *
+ * @param atLineEnd 붙여넣기는 커서 자리에, 끌어다 놓기와 버튼은 커서가 있는 줄 아래에 넣는다
+ */
+function insertImages(fileList, { atLineEnd }) {
+  const area = editor.value
+  if (!memo.value || trashed.value || !area) return
+
+  const all = [...(fileList ?? [])]
+  const files = all.filter(isImageFile)
+  if (!files.length) {
+    toast.error('그림 파일만 넣을 수 있습니다. PNG, JPG, WEBP, GIF')
+    return
+  }
+  const huge = files.filter((f) => f.size > IMAGE_LIMITS.sourceBytes)
+  const usable = files.filter((f) => f.size <= IMAGE_LIMITS.sourceBytes)
+  if (huge.length) toast.error(`너무 큰 파일 ${huge.length}개는 넣지 않았습니다. 40MB 이하만 받습니다.`)
+
+  const room = IMAGE_LIMITS.perMemo - imageCount(memo.value.content)
+  if (room <= 0) {
+    toast.error(`메모 하나에는 그림을 ${IMAGE_LIMITS.perMemo}장까지 넣을 수 있습니다.`)
+    return
+  }
+  const accepted = usable.slice(0, room)
+  if (usable.length > room) toast.info(`${room}장만 넣었습니다. 메모 하나에 ${IMAGE_LIMITS.perMemo}장까지입니다.`)
+  if (!accepted.length) return
+
+  const memoId = memo.value.id
+  const lines = accepted.map((file) => tokenOf(altFromFile(file), gallery.add(memoId, file)))
+
+  const value = area.value
+  const start = atLineEnd ? lineEndOf(value, area.selectionEnd) : area.selectionStart
+  const end = atLineEnd ? start : area.selectionEnd
+  const before = value.slice(0, start)
+  const after = value.slice(end)
+  const text = (before && !before.endsWith('\n') ? '\n' : '') + lines.join('\n') + (after.startsWith('\n') ? '' : '\n')
+  notepad.replaceRange(start, end, text)
+}
+
+/**
+ * 붙여넣기. 클립보드에 그림만 있을 때 가로챈다. 웹페이지나 엑셀을 복사하면 글과 그림이
+ * 함께 오는데, 그때는 글을 붙여넣는다 — 사람이 바란 것은 대개 글이다.
+ */
+function onPaste(event) {
+  const data = event.clipboardData
+  if (!data || trashed.value) return
+  const files = [...data.files].filter(isImageFile)
+  if (!files.length) return
+  if (data.getData('text/plain').trim()) return
+  event.preventDefault()
+  insertImages(files, { atLineEnd: false })
+}
+
+function hasFiles(event) {
+  return [...(event.dataTransfer?.types ?? [])].includes('Files')
+}
+
+function onPadDragOver(event) {
+  if (!hasFiles(event) || !memo.value || trashed.value) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
+  const items = [...(event.dataTransfer.items ?? [])]
+  dragging.value = items.filter((i) => i.kind === 'file' && i.type.startsWith('image/')).length
+}
+
+function onPadDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) dragging.value = null
+}
+
+function onPadDrop(event) {
+  if (!hasFiles(event)) return
+  event.preventDefault()
+  dragging.value = null
+  if (trashed.value) return
+  insertImages(event.dataTransfer.files, { atLineEnd: true })
+}
+
+/** 편집기 밖에 그림을 떨어뜨려도 브라우저가 그 파일을 열며 이 화면을 떠나지 않게 막는다. */
+function blockStrayDrop(event) {
+  if (hasFiles(event)) event.preventDefault()
+}
+
+function pickImages() {
+  if (!memo.value || trashed.value) return
+  fileInput.value?.click()
+}
+
+function onPicked(event) {
+  insertImages(event.target.files, { atLineEnd: true })
+  event.target.value = ''
+}
+
+/** 서명 주소가 만료됐을 수 있다(탭을 하루 넘게 열어 둠). 메모를 다시 읽어 새 주소를 받는다. */
+let refreshedAt = 0
+async function refreshImages() {
+  if (!memo.value || Date.now() - refreshedAt < 30000) return
+  refreshedAt = Date.now()
+  try {
+    const fresh = await memoApi.get(memo.value.id)
+    gallery.merge(fresh.images)
+  } catch {
+    /* 그림만 못 보일 뿐이다. 글을 쓰는 데는 지장이 없다 */
+  }
+}
+
+// ── 크게 보기 ───────────────────────────────────────────
+
+function openViewer(id) {
+  const at = stripItems.value.findIndex((item) => item.id === id)
+  if (at >= 0) viewerIndex.value = at
+}
+
+/** 그림의 토큰 줄로 돌아가 토큰을 고른다. 그림 줄에서 그 칸에 테두리가 생긴다. */
+function findInBody(id) {
+  viewerIndex.value = null
+  const token = tokens.value.find((t) => t.id === id)
+  if (!token) return
+  mobilePane.value = 'editor'
+  nextTick(() => notepad.selectRange(token.start, token.end))
+}
+
+/**
+ * 본문에서 그림을 뺀다. 같은 그림이 여러 번 나오면 모두 뺀다. 토큰만 있던 줄은 줄째로.
+ * 한 번에 바꿔 넣어 Ctrl+Z 한 번으로 돌아오게 하고, 되돌리기 알림도 띄운다.
+ * 그림 자체는 지우지 않는다 — 아무도 가리키지 않으면 하루 뒤 서버가 치운다.
+ */
+function removeFromBody(id) {
+  const area = editor.value
+  if (!memo.value || trashed.value || !area) return
+  const value = area.value
+  const found = tokens.value.filter((t) => t.id === id)
+  if (!found.length) return
+  const alt = found[0].alt
+
+  const cuts = found.map((t) => {
+    const lineStart = value.lastIndexOf('\n', t.start - 1) + 1
+    const lineEnd = lineEndOf(value, t.end)
+    const alone = !value.slice(lineStart, t.start).trim() && !value.slice(t.end, lineEnd).trim()
+    if (!alone) return { from: t.start, to: t.end }
+    // 줄째로 뺀다. 마지막 줄이면 앞 줄 끝의 줄 바꿈을 대신 뺀다
+    if (lineEnd < value.length) return { from: lineStart, to: lineEnd + 1 }
+    return { from: Math.max(0, lineStart - 1), to: lineEnd }
+  })
+  const from = Math.min(...cuts.map((c) => c.from))
+  const to = Math.max(...cuts.map((c) => c.to))
+  let middle = ''
+  let at = from
+  for (const cut of cuts) {
+    middle += value.slice(at, cut.from)
+    at = Math.max(at, cut.to)
+  }
+  middle += value.slice(at, to)
+
+  const original = value.slice(from, to)
+  notepad.replaceRange(from, to, middle)
+  const after = area.value
+  const memoId = memo.value.id
+
+  // 남은 그림이 없으면 닫고, 있으면 같은 자리(다음 그림)를 보여 준다
+  const left = stripItems.value.length
+  if (!left) viewerIndex.value = null
+  else if (viewerIndex.value != null) viewerIndex.value = Math.min(viewerIndex.value, left - 1)
+
+  toast.undoable(`‘${alt || '설명 없는'}’ 그림을 본문에서 뺐습니다`, {
+    label: '되돌리기',
+    hint: 'Ctrl+Z',
+    run: () => {
+      if (memo.value?.id !== memoId || editor.value?.value !== after) {
+        toast.info('그 사이 본문이 바뀌어 여기서는 되돌리지 못했습니다. 본문에서 Ctrl+Z 를 눌러 보세요.')
+        return
+      }
+      notepad.replaceRange(from, from + middle.length, original)
+    },
+  })
+}
 
 // ── 찾은 자리 칠하기 ────────────────────────────────────
 
@@ -294,23 +541,43 @@ const findCount = computed(() => {
 
 /*
  * textarea 는 글자 일부만 칠할 수 없다. 똑같은 글꼴·여백·줄 바꿈을 가진 판을
- * 뒤에 깔고, 그 판에서 찾은 자리만 노랗게 칠한 뒤 textarea 를 투명하게 얹는다.
+ * 뒤에 깔고, 그 판에서 찾은 자리와 그림 토큰을 칠한 뒤 textarea 를 투명하게 얹는다.
+ * 판은 바탕만 칠한다 — 글자는 textarea 가 그리므로 글자색은 바꿀 수 없다.
+ *
+ * 찾은 자리와 토큰은 겹칠 수 있다(그림 설명을 찾을 때). 두 목록의 경계를 모두 모아
+ * 잘게 나눈 뒤, 조각마다 어디에 들었는지 표시한다. 겹치면 찾은 자리가 앞선다.
  */
 const backdropSegs = computed(() => {
   const text = memo.value?.content ?? ''
+  const marks = hits.value
+  const toks = tokens.value
+  const edges = [0, text.length, ...marks.flatMap((h) => [h.start, h.end]), ...toks.flatMap((t) => [t.start, t.end])]
+  const cuts = [...new Set(edges)].sort((a, b) => a - b)
   const out = []
-  let i = 0
-  hits.value.forEach((h, index) => {
-    if (h.start > i) out.push({ text: text.slice(i, h.start), hit: false })
-    out.push({ text: text.slice(h.start, h.end), hit: true, cur: index === currentHit.value })
-    i = h.end
-  })
+  let hi = 0
+  let ti = 0
+  for (let k = 0; k < cuts.length - 1; k++) {
+    const a = cuts[k]
+    while (hi < marks.length && marks[hi].end <= a) hi++
+    while (ti < toks.length && toks[ti].end <= a) ti++
+    const hit = hi < marks.length && marks[hi].start <= a
+    const tok = ti < toks.length && toks[ti].start <= a ? toks[ti] : null
+    out.push({ text: text.slice(a, cuts[k + 1]), hit, cur: hit && hi === currentHit.value, tok: tok?.id ?? null })
+  }
   // 끝이 줄 바꿈이면 판의 높이가 한 줄 모자라 스크롤이 어긋난다
-  out.push({ text: text.slice(i) + '\u200b', hit: false })
+  out.push({ text:'\u200b', hit: false })
   return out
 })
 
-const showBackdrop = computed(() => hits.value.length > 0)
+/** 토큰 꼬리표의 칠. 커서가 걸친 것은 초록, 못 올렸거나 찾을 수 없는 것은 빨강. */
+function tokenClass(id) {
+  if (id === caretImageId.value) return 'tok tok--cur'
+  const entry = gallery.images.get(id)
+  if (!entry || entry.status === 'failed') return 'tok tok--bad'
+  return 'tok'
+}
+
+const showBackdrop = computed(() => hits.value.length > 0 || tokens.value.length > 0)
 
 function syncBackdrop() {
   if (!backdrop.value || !editor.value) return
@@ -327,6 +594,8 @@ onMounted(async () => {
   document.addEventListener('pointerdown', onDocPointer)
   window.addEventListener('beforeunload', onBeforeUnload)
   document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('dragover', blockStrayDrop)
+  window.addEventListener('drop', blockStrayDrop)
 
   try {
     await store.load()
@@ -346,6 +615,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointer)
   window.removeEventListener('beforeunload', onBeforeUnload)
   document.removeEventListener('visibilitychange', onVisibility)
+  window.removeEventListener('dragover', blockStrayDrop)
+  window.removeEventListener('drop', blockStrayDrop)
   clearTimeout(autosaveTimer)
   clearTimeout(retryTimer)
 })
@@ -361,6 +632,12 @@ onBeforeRouteLeave(async () => {
  * 너무 길어 그렇게 못 보내면 브라우저의 "나가시겠습니까?"로 붙잡는다.
  */
 function onBeforeUnload(event) {
+  // 올리던 그림은 탭과 함께 끊긴다. 본문에는 토큰만 남아 '그림 없음'이 된다
+  if (gallery.pending.value) {
+    event.preventDefault()
+    event.returnValue = ''
+    return
+  }
   if (!memo.value || !dirty.value || trashed.value) return
   const sent = memoApi.saveOnExit(memo.value.id, payloadOf(memo.value))
   if (!sent) {
@@ -385,6 +662,8 @@ async function openMemo(id, { focus = true } = {}) {
   busy.value = true
   try {
     const loaded = await memoApi.get(id)
+    gallery.merge(loaded.images)
+    viewerIndex.value = null
     memo.value = loaded
     editVersion.value = 0
     savedVersion.value = 0
@@ -441,6 +720,8 @@ async function save() {
   inflight = (async () => {
     try {
       const saved = await memoApi.update(target.id, payloadOf(target))
+      // 다른 메모에서 복사해 온 토큰은 저장해야 서버가 주소를 알려 준다
+      gallery.merge(saved.images)
       if (memo.value?.id === target.id) {
         // 저장이 가는 사이에 제목을 더 고쳤으면 고친 쪽을 남긴다
         const title = editVersion.value === version ? saved.title : memo.value.title
@@ -547,6 +828,7 @@ async function trashMemo(item = memo.value) {
 async function restoreMemo(id, { reopen = false } = {}) {
   try {
     const restored = await memoApi.restore(id)
+    gallery.merge(restored.images)
     store.applySaved(restored)
     if (memo.value?.id === id) {
       memo.value = restored
@@ -1072,11 +1354,16 @@ watch(
               </span>
               <AppIcon v-if="item.pinned && !showFolderOnItems" name="pin" :size="12" filled class="note__flag" label="고정됨" />
               <AppIcon v-if="item.favorite" name="star" :size="12" filled class="note__star" label="즐겨찾기" />
+              <span v-if="item.images" class="note__images num" :title="`그림 ${item.images}장`">
+                <AppIcon name="image" :size="12" />
+                {{ item.images }}
+              </span>
               <span class="note__when num">{{ whenLabel(activeView === TRASH ? item.deletedAt : item.updatedAt) }}</span>
             </span>
             <span class="note__preview">
-              <template v-for="(part, i) in splitHits(previewOf(item), store.searching ? store.query : '')" :key="i">
-                <mark v-if="part.hit">{{ part.text }}</mark>
+              <template v-for="(part, i) in previewParts(item)" :key="i">
+                <span v-if="part.tag" class="note__tag">{{ part.text }}</span>
+                <mark v-else-if="part.hit">{{ part.text }}</mark>
                 <template v-else>{{ part.text }}</template>
               </template>
             </span>
@@ -1090,7 +1377,14 @@ watch(
     </section>
 
     <!-- ── 3단: 편집기 ── -->
-    <section v-if="memo" class="pad" aria-label="메모 편집">
+    <section
+      v-if="memo"
+      class="pad"
+      aria-label="메모 편집"
+      @dragover="onPadDragOver"
+      @dragleave="onPadDragLeave"
+      @drop="onPadDrop"
+    >
       <div class="pad__bar">
         <button class="btn btn--icon pad__back" type="button" aria-label="목록으로" @click="mobilePane = 'list'">
           <AppIcon name="chevron-left" :size="16" />
@@ -1140,12 +1434,22 @@ watch(
 
         <span class="pad__state" :class="`pad__state--${saveState.tone}`" role="status">
           <AppIcon v-if="saveState.tone === 'ok'" name="check" :size="13" />
+          <span v-else-if="saveState.tone === 'busy'" class="spinner pad__spin" aria-hidden="true"></span>
           {{ saveState.text }}
           <button v-if="saveError" class="pad__retry" type="button" :title="saveError" @click="save">다시 시도</button>
         </span>
 
         <template v-if="!trashed">
           <span class="pad__divider" aria-hidden="true"></span>
+          <button
+            class="btn btn--icon"
+            type="button"
+            title="그림 넣기 — Ctrl+V 로 붙여넣거나 끌어다 놓아도 됩니다"
+            aria-label="그림 넣기: 파일 고르기. 붙여넣기 Ctrl+V, 끌어다 놓기도 됩니다"
+            @click="pickImages"
+          >
+            <AppIcon name="image" :size="16" />
+          </button>
           <button
             class="btn btn--icon"
             type="button"
@@ -1373,7 +1677,19 @@ watch(
         <p class="pad__meta">
           고친 날 <span class="num">{{ fullDate(memo.updatedAt) }}</span>
           <template v-if="memo.createdAt"> · 만든 날 {{ fullDate(memo.createdAt).replace(/ \d\d:\d\d$/, '') }}</template>
+          <template v-if="stripItems.length"> · 그림 <span class="num">{{ stripItems.length }}</span>장</template>
         </p>
+
+        <MemoImageStrip
+          v-if="stripItems.length"
+          :items="stripItems"
+          :current-id="caretImageId"
+          :readonly="trashed"
+          @open="openViewer"
+          @retry="gallery.retry"
+          @add="pickImages"
+          @broken="refreshImages"
+        />
 
         <div class="pad__body">
           <div
@@ -1383,7 +1699,7 @@ watch(
             :class="{ 'pad__text--nowrap': memo.wordWrap === false }"
             :style="editorStyle"
             aria-hidden="true"
-          ><template v-for="(seg, i) in backdropSegs" :key="i"><mark v-if="seg.hit" :class="{ cur: seg.cur }">{{ seg.text }}</mark><template v-else>{{ seg.text }}</template></template></div>
+          ><template v-for="(seg, i) in backdropSegs" :key="i"><mark v-if="seg.hit" :class="{ cur: seg.cur }">{{ seg.text }}</mark><span v-else-if="seg.tok" :class="tokenClass(seg.tok)">{{ seg.text }}</span><template v-else>{{ seg.text }}</template></template></div>
           <textarea
             ref="editor"
             v-model="memo.content"
@@ -1400,6 +1716,7 @@ watch(
             @keydown="notepad.onKeydown"
             @copy="notepad.onCopy"
             @cut="notepad.onCut"
+            @paste="onPaste"
             @click="notepad.sync"
             @keyup="notepad.sync"
             @select="notepad.sync"
@@ -1411,9 +1728,32 @@ watch(
         <span>줄 {{ status.line }}, 칸 {{ status.column }}</span>
         <span v-if="status.selected">고름 {{ status.selected }}자</span>
         <span>{{ stats.chars }}자 · {{ stats.lines }}줄</span>
+        <span v-if="imageStats">{{ imageStats }}</span>
         <span class="pad__spacer"></span>
         <span>{{ viewLabel }}</span>
       </footer>
+
+      <!-- 끌어다 놓는 중. 놓을 곳을 가리지 않게 판은 눌리지 않는다 -->
+      <div v-if="dragging !== null" class="pad__drop" role="status">
+        <div class="pad__dropcard">
+          <span class="pad__dropicon"><AppIcon name="image" :size="18" /></span>
+          <span class="pad__droptext">
+            <strong>{{ dragging ? `그림 ${dragging}장` : '그림' }} — 놓으면 커서가 있는 줄 아래에 넣습니다</strong>
+            <span>png · jpg · webp · gif, 한 장 5MB까지 · 긴 변을 2000px 로 줄여 올립니다</span>
+          </span>
+        </div>
+      </div>
+
+      <input
+        ref="fileInput"
+        class="pad__file"
+        type="file"
+        :accept="IMAGE_TYPES.join(',')"
+        multiple
+        tabindex="-1"
+        aria-hidden="true"
+        @change="onPicked"
+      />
     </section>
 
     <section v-else class="pad pad--empty">
@@ -1424,6 +1764,16 @@ watch(
         새 메모
       </button>
     </section>
+
+    <ImageViewer
+      v-if="memo && viewerIndex !== null && stripItems.length"
+      v-model:index="viewerIndex"
+      :items="stripItems"
+      :readonly="trashed"
+      @close="viewerIndex = null"
+      @find="findInBody"
+      @remove="removeFromBody"
+    />
 
     <BaseModal v-if="shortcutsOpen" title="단축키" subtitle="메모장 단축키를 그대로 씁니다." width="520px" @close="shortcutsOpen = false">
       <dl class="keys">
@@ -1772,6 +2122,28 @@ watch(
   font-size: 11px;
 }
 
+.note__images {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* 미리보기 속 그림 자리. 토큰 아이디 대신 짧은 꼬리표를 단다 */
+.note__tag {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--chip);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.note--on .note__tag {
+  background: var(--surface);
+}
+
 .note__preview {
   display: -webkit-box;
   margin-top: 3px;
@@ -1797,7 +2169,8 @@ watch(
 .note--on .note__when,
 .note--on .note__preview,
 .note--on .note__folder,
-.note--on .note__flag {
+.note--on .note__flag,
+.note--on .note__images {
   color: var(--brand-strong);
   opacity: 0.85;
 }
@@ -1889,6 +2262,16 @@ watch(
 .pad__state--bad {
   color: var(--danger);
   font-weight: 600;
+}
+
+.pad__state--busy {
+  color: var(--text-2);
+}
+
+.pad__spin {
+  width: 11px;
+  height: 11px;
+  border-width: 1.5px;
 }
 
 .pad__retry {
@@ -2330,6 +2713,84 @@ watch(
 .pad__backdrop mark.cur {
   background: var(--mark-current);
   box-shadow: 0 0 0 1px var(--mark-current);
+}
+
+/*
+ * 그림 토큰을 회색 꼬리표처럼 칠한다. 판의 글자는 textarea 와 한 글자도 어긋나면 안 되므로
+ * 여백이나 테두리는 주지 않는다 — 바탕과 그림자만 쓴다(자리를 차지하지 않는다).
+ */
+.pad__backdrop .tok {
+  border-radius: 3px;
+  background: var(--chip);
+  box-shadow: 0 0 0 1px var(--chip);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.pad__backdrop .tok--cur {
+  background: var(--brand-soft);
+  box-shadow: 0 0 0 1px var(--brand-border);
+}
+
+.pad__backdrop .tok--bad {
+  background: var(--danger-soft);
+  box-shadow: 0 0 0 1px var(--danger-border);
+}
+
+/* ---------- 끌어다 놓기 ---------- */
+.pad__drop {
+  position: absolute;
+  inset: 10px 12px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  border: 1.5px dashed var(--brand);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand) 7%, transparent);
+  pointer-events: none;
+}
+
+.pad__dropcard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+  margin-top: 16px;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+
+.pad__dropicon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.pad__droptext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.pad__droptext strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pad__file {
+  display: none;
 }
 
 .pad__status {

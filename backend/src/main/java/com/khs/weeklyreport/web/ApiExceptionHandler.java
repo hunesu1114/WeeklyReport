@@ -12,6 +12,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -50,6 +51,13 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleConflict(DataIntegrityViolationException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(body("이미 처리된 요청이거나 중복된 값입니다.", null));
+    }
+
+    /** multipart 상한(spring.servlet.multipart.max-file-size)을 넘었다. 서비스까지 오기 전에 끊긴다. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleTooLarge(MaxUploadSizeExceededException e) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(body("파일이 너무 큽니다. 한 장에 5MB까지 올릴 수 있습니다.", null));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -34,6 +34,7 @@ class MemoServiceTest {
 
     private final Map<Long, MemoFolder> folders = new HashMap<>();
     private MemoRepository memoRepository;
+    private MemoImageService imageService;
     private MemoService service;
     private AppUser me;
 
@@ -58,7 +59,9 @@ class MemoServiceTest {
         when(currentUser.requireId()).thenReturn(ME);
         when(currentUser.requireEntity()).thenReturn(me);
 
-        service = new MemoService(memoRepository, folderRepository, currentUser,
+        imageService = mock(MemoImageService.class);
+
+        service = new MemoService(memoRepository, folderRepository, imageService, currentUser,
                 java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC));
     }
 
@@ -328,6 +331,82 @@ class MemoServiceTest {
         when(memoRepository.findByIdAndOwnerId(6L, ME)).thenReturn(Optional.of(memo));
 
         assertThat(service.exportText(6L).filename()).isEqualTo("9_16 회의_ 결론_.txt");
+    }
+
+    // ── 그림 ─────────────────────────────────────────────────
+
+    @Test
+    void 저장할_때마다_그림_참조를_다시_맞춘다() {
+        Memo memo = memo(7L);
+
+        service.update(7L, new MemoDtos.MemoRequest("메모", "![화면](img:k3F9aQ2xZ7)", null, null, null, null, null));
+
+        verify(imageService).syncRefs(memo);
+    }
+
+    @Test
+    void 메모_화면을_열면_쓰지_않는_그림을_정리한다() {
+        service.workspace();
+
+        verify(imageService).collectGarbage(ME);
+    }
+
+    @Test
+    void 내보낸_txt_에서_그림_토큰은_설명으로_바뀐다() {
+        Memo memo = memo(8L);
+        memo.setContent("배포 전 화면\n![로그인 오류](img:k3F9aQ2xZ7)\n![](img:Qm81LxV0pa)");
+
+        String text = new String(service.exportText(8L).content(), java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThat(text).isEqualTo("배포 전 화면\r\n[그림: 로그인 오류]\r\n[그림]");
+    }
+
+    @Test
+    void 그림_아이디로는_찾히지_않는다() {
+        Memo memo = memo(9L);
+        memo.setContent("![로그인 오류](img:k3F9aQ2xZ7)");
+        when(memoRepository.search(eq(ME), any())).thenReturn(java.util.List.of(memo));
+
+        // DB 는 원래 본문에서 넓게 고른다. 아이디는 사람이 친 말이 아니므로 걸러 낸다
+        assertThat(service.search("k3F9")).isEmpty();
+        assertThat(service.search("img")).isEmpty();
+    }
+
+    @Test
+    void 그림_설명으로는_찾히고_토막에는_설명이_보인다() {
+        Memo memo = memo(10L);
+        memo.setContent("앞 줄\n![로그인 오류](img:k3F9aQ2xZ7)");
+        when(memoRepository.search(eq(ME), any())).thenReturn(java.util.List.of(memo));
+
+        var hits = service.search("로그인");
+
+        assertThat(hits).hasSize(1);
+        assertThat(hits.get(0).snippet()).contains("[그림: 로그인 오류]").doesNotContain("img:");
+    }
+
+    @Test
+    void 검색_토막은_그림_자리를_가운데서_자르지_않는다() {
+        String body = "[그림: 휴대폰 키보드] [그림] [그림: 콘솔 401 두 번] " + "가".repeat(200) + " [그림: 화이트보드 사진]";
+
+        String snippet = MemoService.snippet(body, "콘솔", "첫 줄");
+
+        // 앞으로 16자를 당기면 '휴대폰 키보드]' 가운데에 걸린다. 그 꼬리표 처음부터 보인다
+        assertThat(snippet).startsWith("[그림: 휴대폰 키보드]").contains("[그림: 콘솔 401 두 번]");
+
+        String tail = MemoService.snippet("가".repeat(100) + " 배포 [그림: 화이트보드 사진] 끝", "배포", "첫 줄");
+        assertThat(tail).contains("[그림: 화이트보드 사진]");
+    }
+
+    @Test
+    void 목록_미리보기와_그림_수() {
+        Memo memo = memo(11L);
+        memo.setContent("![첫 화면](img:k3F9aQ2xZ7)\n설명\n![첫 화면](img:k3F9aQ2xZ7)\n![](img:Qm81LxV0pa)");
+
+        MemoDtos.MemoSummary summary = MemoDtos.MemoSummary.of(memo);
+
+        assertThat(summary.preview()).isEqualTo("[그림: 첫 화면]");
+        // 같은 그림을 두 번 넣어도 한 장이다
+        assertThat(summary.images()).isEqualTo(2);
     }
 
     /** 내 메모 한 장. 깃발 쿼리는 DB 가 하듯 그 자리에서 값만 바꾼다. */

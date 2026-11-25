@@ -94,10 +94,13 @@ public class Memo {
         return deletedAt != null;
     }
 
-    /** 목록에 띄울 한 줄 미리보기. 본문 첫 줄이 제목보다 내용을 잘 알려줄 때가 많다. */
+    /**
+     * 목록에 띄울 한 줄 미리보기. 본문 첫 줄이 제목보다 내용을 잘 알려줄 때가 많다.
+     * 그림 토큰은 {@code [그림: 설명]} 으로 바꿔 보인다 — 아이디는 사람이 읽을 것이 아니다.
+     */
     public String preview() {
         if (content == null || content.isBlank()) return "";
-        String first = content.strip().lines().findFirst().orElse("");
+        String first = MemoImageTokens.toText(content.strip().lines().findFirst().orElse(""));
         return first.length() > 80 ? first.substring(0, 80) + "…" : first;
     }
 }

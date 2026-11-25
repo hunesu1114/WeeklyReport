@@ -27,6 +27,8 @@
   --surface-hover: #eeefeb;
   /* 고른 것. 강조색이 아니라 회색으로 누른다 */
   --surface-sel: #e3e4e0;
+  /* 글 속 꼬리표(메모의 그림 토큰 등). 종이 위에서도, 고른 줄 위에서도 보여야 한다 */
+  --chip: #e8e9e5;
   /* 본문 위에 떠 있는 띠. 뒤가 살짝 비치되 글자는 읽혀야 한다 */
   --surface-glass: rgba(255, 255, 255, 0.96);
 
@@ -127,6 +129,7 @@
     --surface-2: #17181a;
     --surface-hover: #232426;
     --surface-sel: #2a2c2e;
+    --chip: #2e3032;
     --surface-glass: rgba(28, 29, 31, 0.96);
 
     --text: #e9e9e6;
@@ -187,6 +190,7 @@
   --surface-2: #17181a;
   --surface-hover: #232426;
   --surface-sel: #2a2c2e;
+  --chip: #2e3032;
   --surface-glass: rgba(28, 29, 31, 0.96);
 
   --text: #e9e9e6;
